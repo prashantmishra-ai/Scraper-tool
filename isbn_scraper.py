@@ -64,7 +64,6 @@ if not os.path.exists(output_csv):
 
 page_num = 1
 total_collected = 0
-        writer.writerow(EXPECTED_COLUMNS)
 
 def run_scraper(start_page):
     """
@@ -144,7 +143,7 @@ def run_scraper(start_page):
                         page_data.append([c.text.strip() for c in cols])
 
                     # Save directly to disk instantly
-                    with open(OUTPUT_CSV, mode='a', newline='', encoding='utf-8') as f:
+                    with open(output_csv, mode='a', newline='', encoding='utf-8') as f:
                         writer = csv.writer(f)
                         for item in page_data:
                             if item:
