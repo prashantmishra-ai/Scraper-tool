@@ -3,46 +3,12 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.firefox.service import Service
-from selenium.common.exceptions import StaleElementReferenceException, UnexpectedAlertPresentException
+from selenium.common.exceptions import StaleElementReferenceException, UnexpectedAlertPresentException, WebDriverException, TimeoutException
 import pandas as pd
 import time
 import random
 import os
 import csv
-
-service = Service()
-driver = webdriver.Firefox(service=service)
-
-driver.get("https://isbn.gov.in/Home/IsbnSearch")
-
-wait = WebDriverWait(driver, 15)
-
-# Step 1: Click Search Type dropdown
-search_type_dropdown = wait.until(
-    EC.element_to_be_clickable((By.ID, "drpSearchType"))
-)
-search_type_dropdown.click()
-
-# Step 2: Select ISBN Number / Series option
-isbn_series_option = wait.until(
-    EC.presence_of_element_located(
-        (By.XPATH, "//option[contains(text(),'Series')]")
-    )
-)
-isbn_series_option.click()
-
-# Step 3: Wait for input box and enter value 1
-search_input = wait.until(
-    EC.presence_of_element_located((By.ID, "txtsearch"))
-)
-search_input.clear()
-search_input.send_keys("1")
-
-# Step 4: Click Search button
-search_button = driver.find_element(By.ID, "btnSearchIsbnRptNew")
-search_button.click()
-
-time.sleep(3)
 
 # ── Heavy Duty Configuration ─────────────────────────────────────────
 
@@ -81,6 +47,8 @@ def run_scraper(start_page):
     try:
         service = Service()
         driver = webdriver.Firefox(service=service)
+        driver.set_page_load_timeout(120)  # Wait max 2 minutes for page loads
+        driver.set_script_timeout(120)     # Wait max 2 minutes for scripts
         driver.get("https://isbn.gov.in/Home/IsbnSearch")
         wait = WebDriverWait(driver, 15)
 
@@ -109,21 +77,35 @@ def run_scraper(start_page):
         search_button = driver.find_element(By.ID, "btnSearchIsbnRptNew")
         search_button.click()
 
+        print(f"\n⏳ Waiting for server to fetch 2.8 million records... this can take 5-10 seconds.")
+        # Wait until the 'examplenew_info' element is present and populated with text
+        wait.until(lambda d: d.find_element(By.ID, "examplenew_info").text.strip() != "")
+        time.sleep(1) # Extra buffer for stability
+
         # --- DIRECT PAGE JUMP LOGIC START ---
         if page_num > 1:
-            print(f"\n⌛ Jumping to Page {page_num}... Please wait.")
-            time.sleep(5)  # Wait for results to settle
+            print(f"\n⌛ Fast-forwarding directly to Page {page_num}... Please wait.")
             try:
                 # Use DataTables API to change page (DataTables is 0-indexed)
+                # It's crucial we wait until the initial data is fully rendered before injecting this.
                 driver.execute_script(
-                    "var table = $('#examplenew').DataTable(); "
-                    "table.page(arguments[0]).draw('page');", 
+                    "$('#examplenew').dataTable().fnPageChange(arguments[0]);", 
                     page_num - 1
                 )
-                time.sleep(5)  # Wait for the new page data to load
+                
+                # Wait for the "Showing X to Y" text to update to ensure the jump actually finished
+                def jump_completed(d):
+                    info_text = d.find_element(By.ID, "examplenew_info").text
+                    # Check if the first row number displayed matches our target page math
+                    # Use "{:,}" to add commas because DataTables displays "Showing 149,951 to..."
+                    expected_start = "{:,}".format((page_num - 1) * 50 + 1)
+                    return expected_start in info_text
+
+                wait.until(jump_completed)
+                time.sleep(1)  # Extra second for table rows to visually attach to DOM
                 print(f"🚀 Jumped successfully to Page {page_num}!")
             except Exception as e:
-                print(f"⚠️ Could not jump directly: {e}")
+                print(f"⚠️ Could not jump directly (Timeout or Server error): {e}")
                 return page_num, "ERROR"
         # --- DIRECT PAGE JUMP LOGIC END ---
 
@@ -134,7 +116,7 @@ def run_scraper(start_page):
             # Retry loop for StaleElementReferenceException
             for attempt in range(3):
                 try:
-                    time.sleep(2)  # Give DataTables time to finish updating DOM
+                    time.sleep(1)  # Give DataTables time to finish updating DOM
                     rows = driver.find_elements(By.XPATH, "//table[@id='examplenew']/tbody/tr")
                     page_data = []
 
@@ -169,7 +151,7 @@ def run_scraper(start_page):
                 page_num += 1
                 
                 # Randomized delay between clicks
-                time.sleep(random.uniform(3, 7))
+                time.sleep(random.uniform(0.5, 2))
             except Exception as e:
                 print(f"⚠️ Could not click Next: {e}")
                 return page_num, "ERROR"
@@ -203,13 +185,13 @@ if __name__ == "__main__":
             print(f"\n✅ All pages successfully scraped up to {last_page_attempted}!")
             break
         elif status == "BLOCKED":
-            wait_time = 300 # 5 minutes
-            print(f"\n🛑 Scraper blocked at Page {last_page_attempted}. Waiting {wait_time // 60} minutes before auto-restart...")
+            wait_time = 30 # 30 seconds
+            print(f"\n🛑 Scraper blocked at Page {last_page_attempted}. Waiting {wait_time} seconds before auto-restart...")
             current_page = last_page_attempted
             time.sleep(wait_time)
             print(f"\n♻️ Auto-restarting from Page {current_page}...")
         elif status == "ERROR":
-            wait_time = 60 # 1 minute
+            wait_time = 15 # 15 seconds
             print(f"\n❌ Error occurred at Page {last_page_attempted}. Retrying in {wait_time} seconds...")
             current_page = last_page_attempted
             time.sleep(wait_time)
