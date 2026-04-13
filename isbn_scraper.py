@@ -198,4 +198,5 @@ if __name__ == "__main__":
             print(f"\n♻️ Retrying Page {current_page}...")
         else:
             print(f"\n❓ Unknown status '{status}' at page {last_page_attempted}. Exiting.")
-            break7
+            break
+
