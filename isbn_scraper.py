@@ -1,3 +1,6 @@
+from xml.dom.xmlbuilder import Options
+
+from pandas import options
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -46,7 +49,10 @@ def run_scraper(start_page):
 
     try:
         service = Service()
-        driver = webdriver.Firefox(service=service)
+        from selenium.webdriver.firefox.options import Options
+        options = Options()
+        options.add_argument("--headless")
+        driver = webdriver.Firefox(service=service, options=options)
         driver.set_page_load_timeout(120)  # Wait max 2 minutes for page loads
         driver.set_script_timeout(120)     # Wait max 2 minutes for scripts
         driver.get("https://isbn.gov.in/Home/IsbnSearch")
