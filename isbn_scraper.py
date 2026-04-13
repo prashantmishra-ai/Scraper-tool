@@ -18,10 +18,12 @@ scraper_state = {
     "status": "STOPPED",
     "total_records": 0,
     "last_error": "",
-    "logs": []
+    "logs": [],
+    "consecutive_errors": 0,
 }
 stop_event = threading.Event()
 MAX_LOG_LINES = 200
+MAX_CONSECUTIVE_ERRORS = 6
 
 # ── Heavy Duty Configuration ─────────────────────────────────────────
 
@@ -146,12 +148,28 @@ def run_scraper(start_page):
         if page_num > 1:
             log_event(f"Fast-forwarding directly to page {page_num}...")
             try:
-                # Use DataTables API to change page (DataTables is 0-indexed)
-                # It's crucial we wait until the initial data is fully rendered before injecting this.
-                driver.execute_script(
-                    "$('#examplenew').dataTable().fnPageChange(arguments[0]);", 
+                jump_result = driver.execute_script(
+                    """
+                    var targetPage = arguments[0];
+                    var selector = '#examplenew';
+                    if (!window.jQuery || !window.jQuery(selector).length) {
+                        return 'table_not_found';
+                    }
+                    if (window.jQuery.fn.dataTable && window.jQuery.fn.dataTable.isDataTable(selector)) {
+                        window.jQuery(selector).DataTable().page(targetPage).draw('page');
+                        return 'ok_modern';
+                    }
+                    var legacy = window.jQuery(selector).dataTable();
+                    if (legacy && legacy.fnPageChange) {
+                        legacy.fnPageChange(targetPage);
+                        return 'ok_legacy';
+                    }
+                    return 'datatable_not_ready';
+                    """,
                     page_num - 1
                 )
+                if not str(jump_result).startswith("ok"):
+                    raise RuntimeError(f"page-jump failed: {jump_result}")
                 
                 # Wait for the "Showing X to Y" text to update to ensure the jump actually finished
                 def jump_completed(d):
@@ -267,15 +285,18 @@ def run_scraper_thread(start_page):
         if status == "FINISHED":
             log_event(f"All pages successfully scraped up to {last_page_attempted}.")
             scraper_state["status"] = "FINISHED"
+            scraper_state["consecutive_errors"] = 0
             break
         elif status == "STOPPED":
             log_event(f"Scraper stopped at page {last_page_attempted}.")
             scraper_state["status"] = "STOPPED"
+            scraper_state["consecutive_errors"] = 0
             break
         elif status == "BLOCKED":
             wait_time = 30 # 30 seconds
             log_event(f"Scraper blocked at page {last_page_attempted}. Waiting {wait_time}s before auto-restart.")
             scraper_state["status"] = "BLOCKED (Auto-restarting)"
+            scraper_state["consecutive_errors"] = 0
             current_page = last_page_attempted
             
             # Use a fast sleep check so we can stop during the wait
@@ -290,6 +311,14 @@ def run_scraper_thread(start_page):
             log_event(f"Auto-restarting from page {current_page}.")
         elif status == "ERROR":
             wait_time = 15 # 15 seconds
+            scraper_state["consecutive_errors"] += 1
+            if scraper_state["consecutive_errors"] >= MAX_CONSECUTIVE_ERRORS:
+                scraper_state["status"] = "FAILED (manual restart required)"
+                log_event(
+                    f"Stopped after {scraper_state['consecutive_errors']} consecutive errors. "
+                    f"Last error: {scraper_state['last_error']}"
+                )
+                break
             log_event(f"Error at page {last_page_attempted}. Retrying in {wait_time}s.")
             scraper_state["status"] = "ERROR (Auto-restarting)"
             current_page = last_page_attempted
@@ -310,7 +339,8 @@ def run_scraper_thread(start_page):
             break
             
     scraper_state["is_running"] = False
-    scraper_state["status"] = "STOPPED"
+    if scraper_state["status"] not in {"FINISHED", "FAILED (manual restart required)"}:
+        scraper_state["status"] = "STOPPED"
 
 if __name__ == "__main__":
     ckpt = load_checkpoint()
