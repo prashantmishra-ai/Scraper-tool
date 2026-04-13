@@ -25,8 +25,9 @@ WORKDIR /app
 
 COPY . .
 
-RUN pip install selenium pandas
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Send a blank line into the Python script by default to bypass the `input()` 
-# prompt and start on page 1 automatically when Coolify runs it in the background.
-CMD echo "" | python3 isbn_scraper.py
+EXPOSE 5000
+
+# Start the Flask Web App
+CMD ["python3", "app.py"]
