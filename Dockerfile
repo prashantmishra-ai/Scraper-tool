@@ -15,7 +15,7 @@ RUN apt-get update && \
     libxt6 \
     && rm -rf /var/lib/apt/lists/*
 
-RUN wget https://github.com/mozilla/geckodriver/releases/latest/download/geckodriver-linux64.tar.gz \
+RUN wget https://github.com/mozilla/geckodriver/releases/download/v0.35.0/geckodriver-v0.35.0-linux64.tar.gz \
     && tar -xvzf geckodriver-linux64.tar.gz \
     && mv geckodriver /usr/local/bin/ \
     && chmod +x /usr/local/bin/geckodriver
