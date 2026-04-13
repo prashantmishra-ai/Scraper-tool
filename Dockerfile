@@ -16,8 +16,9 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/*
 
 RUN wget https://github.com/mozilla/geckodriver/releases/download/v0.35.0/geckodriver-v0.35.0-linux64.tar.gz \
-    && tar -xvzf geckodriver-linux64.tar.gz \
+    && tar -xvzf geckodriver-v0.35.0-linux64.tar.gz \
     && mv geckodriver /usr/local/bin/ \
+    && rm geckodriver-v0.35.0-linux64.tar.gz \
     && chmod +x /usr/local/bin/geckodriver
 
 WORKDIR /app
@@ -26,4 +27,6 @@ COPY . .
 
 RUN pip install selenium pandas
 
-CMD ["python3", "isbn_scraper.py"]
+# Send a blank line into the Python script by default to bypass the `input()` 
+# prompt and start on page 1 automatically when Coolify runs it in the background.
+CMD echo "" | python3 isbn_scraper.py
