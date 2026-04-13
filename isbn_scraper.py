@@ -103,9 +103,20 @@ def run_scraper(start_page):
 
     try:
         options = FirefoxOptions()
-        # Headless Firefox can crash on some macOS setups; enable only if requested.
-        if os.environ.get("HEADLESS", "").strip() in {"1", "true", "True", "yes", "YES"}:
+        # Auto-detect headless: containers have no DISPLAY so Firefox must be headless.
+        # On a dev machine with a real display, only go headless if HEADLESS=1.
+        # Set HEADLESS=0 to explicitly force non-headless (requires a real display).
+        display_available = bool(os.environ.get("DISPLAY", "").strip())
+        force_headless = os.environ.get("HEADLESS", "").strip() in {"1", "true", "True", "yes", "YES"}
+        force_no_headless = os.environ.get("HEADLESS", "").strip() in {"0", "false", "False", "no", "NO"}
+        if (not display_available or force_headless) and not force_no_headless:
             options.add_argument("-headless")
+            log_event("Running Firefox in headless mode (no display detected or HEADLESS=1).")
+        # Stability flags for containerised / CI environments
+        options.set_preference("browser.cache.disk.enable", False)
+        options.set_preference("browser.cache.memory.enable", False)
+        options.set_preference("browser.cache.offline.enable", False)
+        options.set_preference("network.http.use-cache", False)
 
         # Let Selenium Manager resolve geckodriver automatically (Selenium 4.6+).
         driver = webdriver.Firefox(options=options)
