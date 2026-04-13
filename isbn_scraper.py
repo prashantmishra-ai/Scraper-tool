@@ -14,7 +14,7 @@ import csv
 
 # WE MUST USE CSV: Excel has a hard limit of 1,048,576 rows.
 # 34k pages x 50 rows = 1.7 million rows, which will CRASH Excel completely!
-output_csv = "/Users/innovativus/Downloads/isbn_full_data.csv"
+output_csv = "isbn_full_data.csv"
 
 expected_columns = [
     "#", "Book Title", "ISBN", "Product Form", "Language",
@@ -198,4 +198,4 @@ if __name__ == "__main__":
             print(f"\n♻️ Retrying Page {current_page}...")
         else:
             print(f"\n❓ Unknown status '{status}' at page {last_page_attempted}. Exiting.")
-            break
+            break7
