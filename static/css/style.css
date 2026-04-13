@@ -8,6 +8,7 @@
     --warn: #f59e0b;
     --err: #ef4444;
     --primary: #6366f1;
+    --accent: #0ea5e9;
 }
 
 * { box-sizing: border-box; }
@@ -19,18 +20,20 @@ body {
 }
 
 .dashboard {
-    width: min(1100px, 94vw);
+    width: min(1200px, 94vw);
     margin: 24px auto;
     display: grid;
     gap: 16px;
 }
 
+/* ── Common panel / card shell ─────────────────────────────────────────── */
 .topbar, .panel, .card {
     border: 1px solid #2c3b5f;
     border-radius: 14px;
     background: linear-gradient(180deg, #172444, #101b34);
 }
 
+/* ── Top bar ───────────────────────────────────────────────────────────── */
 .topbar {
     padding: 16px 20px;
     display: flex;
@@ -38,7 +41,7 @@ body {
     align-items: center;
 }
 .topbar h1 { margin: 0; font-size: 1.6rem; }
-.topbar p { margin: 4px 0 0; color: var(--muted); }
+.topbar p  { margin: 4px 0 0; color: var(--muted); }
 
 .pill {
     padding: 8px 12px;
@@ -48,16 +51,41 @@ body {
     background: #27395f;
 }
 
+/* ── Section labels ────────────────────────────────────────────────────── */
+.section-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.section-tag {
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(99,102,241,.18);
+    color: #a5b4fc;
+    border: 1px solid rgba(99,102,241,.35);
+}
+.tag-generic {
+    background: rgba(14,165,233,.18);
+    color: #7dd3fc;
+    border-color: rgba(14,165,233,.35);
+}
+.section-desc { color: var(--muted); font-size: 0.9rem; }
+
+/* ── ISBN stat cards ───────────────────────────────────────────────────── */
 .cards {
     display: grid;
     gap: 12px;
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
-
 .card { padding: 14px; }
 .card h3 { margin: 0 0 8px; color: var(--muted); font-size: 0.85rem; text-transform: uppercase; }
 .metric { margin: 0; font-size: 1.5rem; font-weight: 700; }
 
+/* ── Panel ─────────────────────────────────────────────────────────────── */
 .panel { padding: 16px; }
 .form-row {
     display: flex;
@@ -74,30 +102,60 @@ body {
     border-radius: 10px;
     padding: 10px 12px;
     font-size: 1rem;
+    outline: none;
+    transition: border-color .2s;
+}
+.field input:focus { border-color: var(--primary); }
+
+/* URL input — full-width stretch */
+.url-row { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+.url-field { flex: 1; min-width: 300px; }
+.url-field input { width: 100%; }
+
+.hint {
+    margin: 10px 0 0;
+    font-size: 0.84rem;
+    color: var(--muted);
+}
+.hint code {
+    background: #1e3158;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 0.82rem;
 }
 
+/* ── Buttons ───────────────────────────────────────────────────────────── */
 .actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; }
-
 .btn {
     border: none;
     border-radius: 10px;
     padding: 10px 14px;
     font-weight: 600;
     cursor: pointer;
+    font-family: inherit;
+    font-size: 0.95rem;
+    transition: opacity .15s, transform .1s;
 }
-.btn-primary { background: var(--primary); color: white; }
-.btn-danger { background: #b91c1c; color: white; }
-.btn-secondary { background: #334155; color: white; }
-.btn-ghost { background: transparent; color: var(--muted); border: 1px solid #3a4d74; }
+.btn:hover:not(:disabled) { opacity: .88; transform: translateY(-1px); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn-primary   { background: var(--primary); color: #fff; }
+.btn-danger    { background: #b91c1c; color: #fff; }
+.btn-secondary { background: #334155; color: #fff; }
+.btn-ghost     { background: transparent; color: var(--muted); border: 1px solid #3a4d74; }
+.btn-accent    { background: var(--accent); color: #fff; }
+.btn-sm        { padding: 7px 12px; font-size: 0.87rem; border-radius: 8px; }
 
+/* ── Message banner ────────────────────────────────────────────────────── */
 .message {
     margin-top: 12px;
     border-radius: 10px;
     padding: 10px;
     background: #122643;
     border: 1px solid #2f4f80;
+    font-size: 0.9rem;
 }
 
+/* ── Panel header ──────────────────────────────────────────────────────── */
 .panel-head {
     display: flex;
     justify-content: space-between;
@@ -105,6 +163,7 @@ body {
     margin-bottom: 10px;
 }
 
+/* ── Console / log box ─────────────────────────────────────────────────── */
 .console {
     margin: 0;
     max-height: 340px;
@@ -119,13 +178,125 @@ body {
     color: #cbd5e1;
 }
 
-.status-RUNNING { color: var(--ok); }
+/* ── ISBN status colours ───────────────────────────────────────────────── */
+.status-RUNNING  { color: var(--ok); }
 .status-BLOCKED, .status-INITIALIZING { color: var(--warn); }
-.status-ERROR { color: var(--err); }
+.status-ERROR    { color: var(--err); }
 .status-STOPPED, .status-FINISHED { color: #93c5fd; }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   Generic scraper cards
+   ══════════════════════════════════════════════════════════════════════════ */
+.generic-grid {
+    display: grid;
+    gap: 14px;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+}
+
+.g-card {
+    border: 1px solid #2c3b5f;
+    border-radius: 14px;
+    background: linear-gradient(160deg, #131f3e, #0e1828);
+    padding: 16px;
+    display: grid;
+    gap: 12px;
+    transition: box-shadow .2s;
+}
+.g-card:hover { box-shadow: 0 0 0 1px #4f6aac44, 0 4px 20px #0008; }
+
+.g-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+}
+.g-domain {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--accent);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.g-url {
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-top: 2px;
+    word-break: break-all;
+}
+
+/* Status badge */
+.g-badge {
+    flex-shrink: 0;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+}
+.gstatus-RUNNING     { background: #14532d33; color: var(--ok);  border-color: #22c55e55; }
+.gstatus-FINISHED    { background: #1e3a5f33; color: #93c5fd;    border-color: #93c5fd55; }
+.gstatus-ERROR       { background: #7f1d1d33; color: var(--err); border-color: #ef444455; }
+.gstatus-STOPPED     { background: #33415533; color: var(--muted); border-color: #47556933; }
+.gstatus-STOPPING    { background: #78350f33; color: var(--warn); border-color: #f59e0b55; }
+.gstatus-LOADING,
+.gstatus-INITIALIZING { background: #78350f22; color: var(--warn); border-color: #f59e0b44; }
+
+/* Mini stats row */
+.g-stats {
+    display: flex;
+    gap: 12px;
+}
+.g-stat { flex: 1; }
+.g-stat-val   { font-size: 1.1rem; font-weight: 700; }
+.g-stat-label { font-size: 0.72rem; color: var(--muted); margin-top: 2px; text-transform: uppercase; }
+
+/* Mini log inside card */
+.g-console {
+    margin: 0;
+    background: #050a16;
+    border: 1px solid #1e3158;
+    border-radius: 8px;
+    padding: 9px 11px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.78rem;
+    line-height: 1.4;
+    color: #94a3b8;
+    max-height: 120px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.g-error {
+    font-size: 0.82rem;
+    color: var(--err);
+    background: #7f1d1d22;
+    border: 1px solid #ef444433;
+    border-radius: 8px;
+    padding: 7px 10px;
+}
+
+.g-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ── Empty state hint ──────────────────────────────────────────────────── */
+.no-sessions-hint {
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.9rem;
+    padding: 20px;
+    border: 1px dashed #2c3b5f;
+    border-radius: 14px;
+    background: #0e1828;
+}
+
+/* ── Utilities ─────────────────────────────────────────────────────────── */
 .hidden { display: none; }
 
 @media (max-width: 640px) {
-    .topbar { flex-direction: column; align-items: flex-start; gap: 10px; }
+    .topbar  { flex-direction: column; align-items: flex-start; gap: 10px; }
+    .url-row { flex-direction: column; }
+    .generic-grid { grid-template-columns: 1fr; }
 }

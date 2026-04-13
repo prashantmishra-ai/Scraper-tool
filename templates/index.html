@@ -3,73 +3,122 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ISBN Scraper Dashboard</title>
-    <meta name="description" content="Production dashboard for ISBN scraping jobs.">
+    <title>Web Scraper Dashboard</title>
+    <meta name="description" content="Multi-site web scraper dashboard — run simultaneous scraping jobs from any URL.">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-    <main class="dashboard">
-        <header class="topbar">
-            <div>
-                <h1>ISBN Scraper Dashboard</h1>
-                <p>Deploy-ready interface for Coolify</p>
+<main class="dashboard">
+
+    <!-- ── Top bar ──────────────────────────────────────────────────────── -->
+    <header class="topbar">
+        <div>
+            <h1>Web Scraper Dashboard</h1>
+            <p>ISBN scraper + multi-site generic scraper — powered by Selenium</p>
+        </div>
+        <div class="pill" id="service-health">Checking...</div>
+    </header>
+
+    <!-- ══════════════════════════════════════════════════════════════════ -->
+    <!--  SECTION 1 — ISBN Scraper                                         -->
+    <!-- ══════════════════════════════════════════════════════════════════ -->
+    <section class="section-label">
+        <span class="section-tag">ISBN Scraper</span>
+        <span class="section-desc">isbn.gov.in · 54 k pages · DataTables pagination</span>
+    </section>
+
+    <section class="cards">
+        <article class="card">
+            <h3>Status</h3>
+            <p class="metric status-text" id="run-status">STOPPED</p>
+        </article>
+        <article class="card">
+            <h3>Current Page</h3>
+            <p class="metric" id="current-page">1</p>
+        </article>
+        <article class="card">
+            <h3>Total Records</h3>
+            <p class="metric" id="total-records">0</p>
+        </article>
+        <article class="card">
+            <h3>Resume From</h3>
+            <p class="metric" id="resume-page">1</p>
+        </article>
+        <article class="card">
+            <h3>CSV Size</h3>
+            <p class="metric" id="csv-size">0 MB</p>
+        </article>
+    </section>
+
+    <section class="panel">
+        <div class="form-row">
+            <div class="field">
+                <label for="startPage">Start page</label>
+                <input type="number" id="startPage" min="1" placeholder="Leave blank to use checkpoint">
             </div>
-            <div class="pill" id="service-health">Checking...</div>
-        </header>
-
-        <section class="cards">
-            <article class="card">
-                <h3>Status</h3>
-                <p class="metric status-text" id="run-status">STOPPED</p>
-            </article>
-            <article class="card">
-                <h3>Current Page</h3>
-                <p class="metric" id="current-page">1</p>
-            </article>
-            <article class="card">
-                <h3>Total Records</h3>
-                <p class="metric" id="total-records">0</p>
-            </article>
-            <article class="card">
-                <h3>Resume From</h3>
-                <p class="metric" id="resume-page">1</p>
-            </article>
-            <article class="card">
-                <h3>CSV Size</h3>
-                <p class="metric" id="csv-size">0 MB</p>
-            </article>
-        </section>
-
-        <section class="panel">
-            <div class="form-row">
-                <div class="field">
-                    <label for="startPage">Start page</label>
-                    <input type="number" id="startPage" min="1" placeholder="Leave blank to use checkpoint">
-                </div>
-                <div class="actions">
-                    <button id="btn-start" class="btn btn-primary" onclick="startScraper()">Start</button>
-                    <button id="btn-stop" class="btn btn-danger hidden" onclick="stopScraper()">Stop</button>
-                    <button id="btn-download" class="btn btn-secondary" onclick="downloadCsv()">Download CSV</button>
-                </div>
+            <div class="actions">
+                <button id="btn-start" class="btn btn-primary" onclick="startScraper()">▶ Start ISBN</button>
+                <button id="btn-stop" class="btn btn-danger hidden" onclick="stopScraper()">■ Stop</button>
+                <button id="btn-download" class="btn btn-secondary" onclick="downloadCsv()">⬇ Download CSV</button>
             </div>
-            <div id="action-message" class="message hidden"></div>
-        </section>
+        </div>
+        <div id="action-message" class="message hidden"></div>
+    </section>
 
-        <section class="panel hidden" id="error-box">
-            <h3>Latest Error</h3>
-            <p id="last-error"></p>
-        </section>
+    <section class="panel hidden" id="error-box">
+        <h3>Latest Error</h3>
+        <p id="last-error"></p>
+    </section>
 
-        <section class="panel">
-            <div class="panel-head">
-                <h3>Live Console</h3>
-                <button class="btn btn-ghost" onclick="clearConsole()">Clear View</button>
+    <section class="panel">
+        <div class="panel-head">
+            <h3>ISBN Live Console</h3>
+            <button class="btn btn-ghost" onclick="clearConsole()">Clear View</button>
+        </div>
+        <pre id="log-console" class="console">Waiting for logs...</pre>
+    </section>
+
+    <!-- ══════════════════════════════════════════════════════════════════ -->
+    <!--  SECTION 2 — Generic Multi-site Scraper                           -->
+    <!-- ══════════════════════════════════════════════════════════════════ -->
+    <section class="section-label" style="margin-top:8px;">
+        <span class="section-tag tag-generic">Generic Scraper</span>
+        <span class="section-desc">Paste any URL — extracts all table data simultaneously</span>
+    </section>
+
+    <section class="panel">
+        <div class="url-row">
+            <div class="field url-field">
+                <label for="scrapeUrl">Website URL</label>
+                <input
+                    type="url"
+                    id="scrapeUrl"
+                    placeholder="https://example.com/data-page"
+                    autocomplete="off"
+                >
             </div>
-            <pre id="log-console" class="console">Waiting for logs...</pre>
-        </section>
-    </main>
+            <div class="actions">
+                <button class="btn btn-accent" onclick="addGenericScraper()" id="btn-add-generic">
+                    + Add Scraper
+                </button>
+            </div>
+        </div>
+        <div id="generic-message" class="message hidden"></div>
+        <p class="hint">Max 5 simultaneous sessions. Extracts all <code>&lt;table&gt;</code> data found on the page. Supports DataTables pagination.</p>
+    </section>
 
-    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+    <!-- Scraper cards grid -->
+    <section id="generic-cards-grid" class="generic-grid" style="display:none;">
+        <!-- Cards injected by JS -->
+    </section>
+
+    <p id="no-sessions-hint" class="no-sessions-hint" style="display:none;">
+        No scrapers added yet. Paste a URL above and click <strong>Add Scraper</strong>.
+    </p>
+
+</main>
+
+<script src="{{ url_for('static', filename='js/script.js') }}"></script>
 </body>
 </html>
