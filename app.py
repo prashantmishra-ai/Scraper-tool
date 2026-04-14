@@ -110,12 +110,13 @@ def download_data():
 def generic_add():
     data = request.json or {}
     url = (data.get('url') or '').strip()
+    mode = data.get('mode', 'single')
     if not url:
         return jsonify({"status": "error", "message": "URL is required."}), 400
     if not url.startswith(('http://', 'https://')):
         url = 'https://' + url
 
-    session_id, err = start_generic_session(url)
+    session_id, err = start_generic_session(url, mode)
     if err:
         return jsonify({"status": "error", "message": err}), 429
 

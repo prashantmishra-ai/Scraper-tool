@@ -148,7 +148,7 @@ def _click_datatable_next(driver):
     return False
 
 
-def run_generic_scraper(session_id: str, start_url: str, stop_event: threading.Event):
+def run_generic_scraper(session_id: str, start_url: str, mode: str, stop_event: threading.Event):
     """
     Core scraping function. Runs in its own thread.
     Writes results to generic_<session_id>.csv
@@ -198,9 +198,9 @@ def run_generic_scraper(session_id: str, start_url: str, stop_event: threading.E
                     is_datatable = _has_datatable(driver)
                     _log(session_id, f"DataTables detected: {is_datatable}")
 
-                # If NOT datatable, collect internal links on the first page
-                if len(visited) == 1 and not is_datatable:
-                    _log(session_id, "No DataTable found. Activating Deep Crawl mode...")
+                # If deep mode, collect internal links on the first page
+                if len(visited) == 1 and not is_datatable and mode == "deep":
+                    _log(session_id, "Deep Crawl mode activated. Collecting links...")
                     links = driver.find_elements(By.TAG_NAME, 'a')
                     collected = 0
                     for a in links:
@@ -211,6 +211,8 @@ def run_generic_scraper(session_id: str, start_url: str, stop_event: threading.E
                             if collected >= MAX_CRAWL_LINKS:
                                 break
                     _log(session_id, f"Queued {collected} internal links for deep scraping.")
+                elif len(visited) == 1 and mode == "single":
+                    _log(session_id, "Single Page mode activated. No deep crawling.")
 
                 page_num = 1
                 while not stop_event.is_set():
@@ -276,7 +278,7 @@ def run_generic_scraper(session_id: str, start_url: str, stop_event: threading.E
                     generic_sessions[session_id]["status"] = "STOPPED"
 
 
-def start_generic_session(url: str) -> tuple[str, str]:
+def start_generic_session(url: str, mode: str = "single") -> tuple[str, str]:
     """
     Creates a new session, starts the scraper thread.
     Returns (session_id, error_message). error is "" on success.
@@ -302,7 +304,7 @@ def start_generic_session(url: str) -> tuple[str, str]:
 
     t = threading.Thread(
         target=run_generic_scraper,
-        args=(session_id, url, stop_event),
+        args=(session_id, url, mode, stop_event),
         daemon=True,
     )
     t.start()

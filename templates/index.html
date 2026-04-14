@@ -98,9 +98,12 @@
                     autocomplete="off"
                 >
             </div>
-            <div class="actions">
-                <button class="btn btn-accent" onclick="addGenericScraper()" id="btn-add-generic">
-                    + Add Scraper
+            <div class="actions" style="display: flex; gap: 8px;">
+                <button class="btn btn-primary" onclick="addGenericScraper('single')" id="btn-g-single">
+                    📄 Scrape Single Page
+                </button>
+                <button class="btn btn-accent" onclick="addGenericScraper('deep')" id="btn-g-deep">
+                    🕸️ Scrape Every Link
                 </button>
             </div>
         </div>
@@ -108,8 +111,8 @@
         <p class="hint">Max 5 simultaneous sessions. Extracts all <code>&lt;table&gt;</code> data found on the page. Supports DataTables pagination.</p>
     </section>
 
-    <!-- Scraper cards grid -->
-    <section id="generic-cards-grid" class="generic-grid" style="display:none;">
+    <!-- Scraper cards stack -->
+    <section id="generic-cards-grid" style="display:none; display: flex; flex-direction: column; gap: 24px; margin-top: 24px;">
         <!-- Cards injected by JS -->
     </section>
 

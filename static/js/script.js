@@ -141,20 +141,21 @@ function setGenericMessage(msg, isError = false) {
     setTimeout(() => el.classList.add("hidden"), 5000);
 }
 
-async function addGenericScraper() {
+async function addGenericScraper(mode) {
     const urlInput = document.getElementById("scrapeUrl");
     const url = urlInput.value.trim();
     if (!url) { setGenericMessage("Please enter a URL.", true); return; }
 
-    const btn = document.getElementById("btn-add-generic");
-    btn.disabled = true;
-    btn.textContent = "Starting…";
+    const btn1 = document.getElementById("btn-g-single");
+    const btn2 = document.getElementById("btn-g-deep");
+    if(btn1) btn1.disabled = true;
+    if(btn2) btn2.disabled = true;
 
     try {
         const res = await fetch("/api/generic/add", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ url }),
+            body: JSON.stringify({ url, mode }),
         });
         const data = await res.json();
         if (!res.ok) {
@@ -167,8 +168,8 @@ async function addGenericScraper() {
     } catch {
         setGenericMessage("Could not reach /api/generic/add", true);
     } finally {
-        btn.disabled = false;
-        btn.textContent = "+ Add Scraper";
+        if(btn1) btn1.disabled = false;
+        if(btn2) btn2.disabled = false;
     }
 }
 
@@ -198,17 +199,17 @@ function renderGenericCards(sessions) {
     sessions.forEach(s => byId[s.session_id] = s);
 
     // Remove cards for sessions that no longer exist
-    Array.from(grid.querySelectorAll(".g-card")).forEach(card => {
+    Array.from(grid.querySelectorAll(".g-panel-wrap")).forEach(card => {
         if (!byId[card.dataset.id]) card.remove();
     });
 
     // Insert / update cards (newest first)
     const sorted = [...sessions].reverse();
     sorted.forEach((sess, idx) => {
-        let card = grid.querySelector(`.g-card[data-id="${sess.session_id}"]`);
+        let card = grid.querySelector(`.g-panel-wrap[data-id="${sess.session_id}"]`);
         if (!card) {
-            card = document.createElement("article");
-            card.className = "g-card";
+            card = document.createElement("div");
+            card.className = "g-panel-wrap";
             card.dataset.id = sess.session_id;
             grid.insertBefore(card, grid.firstChild);
         }
@@ -217,47 +218,55 @@ function renderGenericCards(sessions) {
 }
 
 function buildCardHTML(sess) {
-    const statusClass = `gstatus-${normalizeStatusClass(sess.status || "STOPPED")}`;
+    const statusClass = normalizeStatusClass(sess.status || "STOPPED");
     const domain = (() => {
         try { return new URL(sess.url).hostname; } catch { return sess.url; }
     })();
     const shortUrl = sess.url.length > 55 ? sess.url.slice(0, 52) + "…" : sess.url;
-    const logs = Array.isArray(sess.logs) ? sess.logs.slice(-6).join("\n") : "";
+    const logs = Array.isArray(sess.logs) ? sess.logs.slice(-8).join("\n") : "";
     const isRunning = sess.is_running;
     const hasCsv = sess.records > 0;
 
     return `
-        <div class="g-card-header">
-            <div>
-                <div class="g-domain">${domain}</div>
-                <div class="g-url" title="${sess.url}">${shortUrl}</div>
+        <section class="panel" style="border: 1px solid #334871;">
+            <div class="panel-head" style="margin-bottom: 20px; align-items: flex-start;">
+                <div>
+                    <h3 style="margin: 0; font-size: 1.25rem; color: #fff;">${domain}</h3>
+                    <p style="margin: 4px 0 0; color: var(--muted); font-size: 0.85rem;" title="${sess.url}">${shortUrl}</p>
+                </div>
+                <div class="actions">
+                    ${isRunning
+                        ? `<button class="btn btn-danger btn-sm" onclick="stopGenericSession('${sess.session_id}')">■ Stop</button>`
+                        : `<button class="btn btn-ghost btn-sm" onclick="removeGenericSession('${sess.session_id}')">🗑 Remove</button>`}
+                    ${hasCsv
+                        ? `<button class="btn btn-secondary btn-sm" onclick="downloadGenericCsv('${sess.session_id}')">⬇ Download CSV</button>`
+                        : ""}
+                </div>
             </div>
-            <span class="g-badge ${statusClass}">${sess.status}</span>
-        </div>
-        <div class="g-stats">
-            <div class="g-stat">
-                <div class="g-stat-val">${(sess.records || 0).toLocaleString()}</div>
-                <div class="g-stat-label">Rows saved</div>
+
+            <div class="cards" style="margin-bottom: 20px;">
+                <div class="card">
+                    <h3>Status</h3>
+                    <p class="metric status-${statusClass}">${sess.status}</p>
+                </div>
+                <div class="card">
+                    <h3>Rows Saved</h3>
+                    <p class="metric">${(sess.records || 0).toLocaleString()}</p>
+                </div>
+                <div class="card">
+                    <h3>Started At</h3>
+                    <p class="metric">${sess.started_at || "—"}</p>
+                </div>
+                <div class="card">
+                    <h3>Session ID</h3>
+                    <p class="metric">${sess.session_id}</p>
+                </div>
             </div>
-            <div class="g-stat">
-                <div class="g-stat-val">${sess.started_at || "—"}</div>
-                <div class="g-stat-label">Started at</div>
-            </div>
-            <div class="g-stat">
-                <div class="g-stat-val">${sess.session_id}</div>
-                <div class="g-stat-label">Session ID</div>
-            </div>
-        </div>
-        ${sess.error ? `<div class="g-error">⚠ ${sess.error}</div>` : ""}
-        <pre class="g-console">${logs || "Waiting for logs…"}</pre>
-        <div class="g-actions">
-            ${isRunning
-                ? `<button class="btn btn-danger btn-sm" onclick="stopGenericSession('${sess.session_id}')">■ Stop</button>`
-                : `<button class="btn btn-ghost btn-sm" onclick="removeGenericSession('${sess.session_id}')">🗑 Remove</button>`}
-            ${hasCsv
-                ? `<button class="btn btn-secondary btn-sm" onclick="downloadGenericCsv('${sess.session_id}')">⬇ CSV</button>`
-                : ""}
-        </div>
+
+            ${sess.error ? `<div class="message" style="margin-bottom: 16px; background: #3f1212; border-color: #7f1d1d; color: #fca5a5;">⚠ ${sess.error}</div>` : ""}
+
+            <pre class="console" style="max-height: 160px; margin: 0;">${logs || "Waiting for logs…"}</pre>
+        </section>
     `;
 }
 
