@@ -168,7 +168,7 @@ def run_generic_scraper(session_id: str, start_url: str, mode: str, stop_event: 
         from urllib.parse import urlparse
         base_domain = urlparse(start_url).netloc
 
-        with open(csv_path, "w", newline="", encoding="utf-8") as f:
+        with open(csv_path, "w", newline="", encoding="utf-8-sig") as f:
             writer = csv.writer(f)
 
             while queue and not stop_event.is_set():
