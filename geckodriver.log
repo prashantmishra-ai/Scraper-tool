@@ -1,0 +1,131 @@
+1776184204045	geckodriver	INFO	Listening on 127.0.0.1:51382
+1776184204574	mozrunner::runner	INFO	Running command: MOZ_CRASHREPORTER="1" MOZ_CRASHREPORTER_NO_REPORT="1" MOZ_CRASHREPORTER_SHUTDOWN="1" "/Users/innovativus/.ca ... s" "localhost" "-foreground" "-no-remote" "-profile" "/var/folders/gj/l2_w5kq910162j0llnv7p8zc0000gn/T/rust_mozprofileabdBjw"
+*** You are running in headless mode.
+1776184212466	Marionette	INFO	Marionette enabled
+1776184212861	Marionette	INFO	Listening on port 51403
+Read port: 51403
+WebDriver BiDi listening on ws://127.0.0.1:51383
+1776184213100	RemoteAgent	WARN	TLS certificate errors will be ignored for this session
+[GFX1-]: RenderCompositorSWGL failed mapping default framebuffer, no dt
+JavaScript error: https://isbn.gov.in/assets/js/jquery-3.7.1.min.js, line 2: TypeError: e.indexOf is not a function
+console.error: "Experiment visual-card-updates has unknown featureId: newtabRefinedCardsLayout"
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 153 of the JSON data
+1776184283264	geckodriver	INFO	Listening on 127.0.0.1:51656
+1776184283772	mozrunner::runner	INFO	Running command: MOZ_CRASHREPORTER="1" MOZ_CRASHREPORTER_NO_REPORT="1" MOZ_CRASHREPORTER_SHUTDOWN="1" "/Users/innovativus/.ca ... s" "localhost" "-foreground" "-no-remote" "-profile" "/var/folders/gj/l2_w5kq910162j0llnv7p8zc0000gn/T/rust_mozprofileVrJu1l"
+*** You are running in headless mode.
+1776184285062	Marionette	INFO	Marionette enabled
+1776184285443	Marionette	INFO	Listening on port 51668
+Read port: 51668
+WebDriver BiDi listening on ws://127.0.0.1:51657
+1776184285785	RemoteAgent	WARN	TLS certificate errors will be ignored for this session
+[GFX1-]: RenderCompositorSWGL failed mapping default framebuffer, no dt
+console.error: "Experiment visual-card-updates has unknown featureId: newtabRefinedCardsLayout"
+JavaScript warning: https://cdn.r9x.in/directprod-5031594.js, line 16890: unreachable code after return statement
+JavaScript warning: https://www.ndtv.com/UVd8mb/FW/kV/r1RB/fbhxrbwxf4Gys/JVw7wS1S9h/O2Zv/VXNmd1h/1NGdw?v=685d9f05-2d34-ab52-a671-e605b57d1740, line 1: unreachable code after return statement
+JavaScript warning: https://cdn.ndtv.com/vp/static/js/initvidplayerDAI.min.new.js?v=2026-04-14-21, line 1: unreachable code after return statement
+JavaScript warning: https://www.ndtv.com/UVd8mb/FW/kV/r1RB/fbhxrbwxf4Gys/JVw7wS1S9h/O2Zv/VXNmd1h/1NGdw?v=685d9f05-2d34-ab52-a671-e605b57d1740, line 1: unreachable code after return statement
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 153 of the JSON data
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 153 of the JSON data
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 153 of the JSON data
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 155 of the JSON data
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 153 of the JSON data
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 153 of the JSON data
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 153 of the JSON data
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 153 of the JSON data
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 153 of the JSON data
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 153 of the JSON data
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 153 of the JSON data
+JavaScript error: https://gum.criteo.com/sync?c=72&r=2&j=TRC.getRTUS&us_privacy=&gdpr=0&gdpr_consent=, line 1: TypeError: TRC.getRTUS is not a function
+JavaScript warning: https://www.ndtv.com/UVd8mb/FW/kV/r1RB/fbhxrbwxf4Gys/JVw7wS1S9h/O2Zv/VXNmd1h/1NGdw?v=685d9f05-2d34-ab52-a671-e605b57d1740, line 1: WEBGL_debug_renderer_info is deprecated in Firefox and will be removed. Please use RENDERER.
+JavaScript warning: https://www.ndtv.com/UVd8mb/FW/kV/r1RB/fbhxrbwxf4Gys/JVw7wS1S9h/O2Zv/VXNmd1h/1NGdw?v=685d9f05-2d34-ab52-a671-e605b57d1740, line 1: WEBGL_debug_renderer_info is deprecated in Firefox and will be removed. Please use RENDERER.
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 153 of the JSON data
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 153 of the JSON data
+JavaScript error: , line 0: uncaught exception: Object
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 153 of the JSON data
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 153 of the JSON data
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 153 of the JSON data
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 153 of the JSON data
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 153 of the JSON data
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 153 of the JSON data
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 153 of the JSON data
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 153 of the JSON data
+1776184326483	geckodriver	INFO	Listening on 127.0.0.1:52390
+1776184326994	mozrunner::runner	INFO	Running command: MOZ_CRASHREPORTER="1" MOZ_CRASHREPORTER_NO_REPORT="1" MOZ_CRASHREPORTER_SHUTDOWN="1" "/Users/innovativus/.ca ... s" "localhost" "-foreground" "-no-remote" "-profile" "/var/folders/gj/l2_w5kq910162j0llnv7p8zc0000gn/T/rust_mozprofileaN1y9a"
+*** You are running in headless mode.
+1776184327904	Marionette	INFO	Marionette enabled
+1776184328247	Marionette	INFO	Listening on port 52404
+Read port: 52404
+WebDriver BiDi listening on ws://127.0.0.1:52391
+1776184328671	RemoteAgent	WARN	TLS certificate errors will be ignored for this session
+JavaScript warning: https://a.amxrtb.com/js/cframe.js#gdpr=0&gdpr_consent=&cc=IN, line 1: Script terminated by timeout at:
+r@https://a.amxrtb.com/js/cframe.js#gdpr=0&gdpr_consent=&cc=IN:1:144
+d@https://a.amxrtb.com/js/cframe.js#gdpr=0&gdpr_consent=&cc=IN:1:4720
+
+[GFX1-]: RenderCompositorSWGL failed mapping default framebuffer, no dt
+JavaScript warning: https://www.aajtak.in/, line 1881: unreachable code after return statement
+console.error: "Experiment visual-card-updates has unknown featureId: newtabRefinedCardsLayout"
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 153 of the JSON data
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 153 of the JSON data
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 153 of the JSON data
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 153 of the JSON data
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 153 of the JSON data
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 153 of the JSON data
+JavaScript error: https://aax-events-cell02-cf.ap-southeast.aps.axp.amazon-adsystem.com/e/dtb/admi?b=JG56wRTjlFxPzoBFcLyI59sAAAGdjNYRJQUAAAJYAUFhcHNfdHhuX2JpZDEgICBhcHNfdHhuX2ltcDEgICAhJdPB&rnd=1875234022121776184334985&pp=wu53pc&p=n717nk&crid=29239961, line 6: TypeError: can't access property "getHighEntropyValues", navigator.userAgentData is undefined
+JavaScript warning: https://pagead2.googlesyndication.com/bg/wC0ySGIz5K7Ocf5aL2ADkVdmDmNMMVPgqLGwzzz765I.js, line 624: unreachable code after return statement
+JavaScript warning: https://pagead2.googlesyndication.com/bg/wC0ySGIz5K7Ocf5aL2ADkVdmDmNMMVPgqLGwzzz765I.js, line 624: unreachable code after return statement
+JavaScript warning: https://pagead2.googlesyndication.com/bg/wC0ySGIz5K7Ocf5aL2ADkVdmDmNMMVPgqLGwzzz765I.js, line 624: unreachable code after return statement
+JavaScript warning: https://pagead2.googlesyndication.com/bg/wC0ySGIz5K7Ocf5aL2ADkVdmDmNMMVPgqLGwzzz765I.js, line 624: unreachable code after return statement
+JavaScript warning: https://pagead2.googlesyndication.com/bg/wC0ySGIz5K7Ocf5aL2ADkVdmDmNMMVPgqLGwzzz765I.js, line 624: unreachable code after return statement
+JavaScript warning: https://pagead2.googlesyndication.com/bg/wC0ySGIz5K7Ocf5aL2ADkVdmDmNMMVPgqLGwzzz765I.js, line 624: unreachable code after return statement
+JavaScript warning: https://pagead2.googlesyndication.com/bg/wC0ySGIz5K7Ocf5aL2ADkVdmDmNMMVPgqLGwzzz765I.js line 2 > eval, line 624: unreachable code after return statement
+JavaScript warning: https://pagead2.googlesyndication.com/bg/wC0ySGIz5K7Ocf5aL2ADkVdmDmNMMVPgqLGwzzz765I.js line 2 > eval line 624 > eval, line 1: unreachable code after return statement
+JavaScript warning: https://pagead2.googlesyndication.com/bg/wC0ySGIz5K7Ocf5aL2ADkVdmDmNMMVPgqLGwzzz765I.js line 2 > eval line 624 > eval line 1 > eval, line 1: unreachable code after return statement
+JavaScript warning: https://pagead2.googlesyndication.com/bg/wC0ySGIz5K7Ocf5aL2ADkVdmDmNMMVPgqLGwzzz765I.js line 2 > eval, line 624: unreachable code after return statement
+JavaScript warning: https://pagead2.googlesyndication.com/bg/wC0ySGIz5K7Ocf5aL2ADkVdmDmNMMVPgqLGwzzz765I.js line 2 > eval, line 624: unreachable code after return statement
+JavaScript warning: https://pagead2.googlesyndication.com/bg/wC0ySGIz5K7Ocf5aL2ADkVdmDmNMMVPgqLGwzzz765I.js line 2 > eval line 624 > eval line 1 > eval, line 1: unreachable code after return statement
+JavaScript warning: https://pagead2.googlesyndication.com/bg/wC0ySGIz5K7Ocf5aL2ADkVdmDmNMMVPgqLGwzzz765I.js line 2 > eval line 624 > eval line 1 > eval line 1 > eval, line 1: unreachable code after return statement
+JavaScript warning: https://pagead2.googlesyndication.com/bg/wC0ySGIz5K7Ocf5aL2ADkVdmDmNMMVPgqLGwzzz765I.js, line 3266: unreachable code after return statement
+JavaScript warning: https://pagead2.googlesyndication.com/bg/wC0ySGIz5K7Ocf5aL2ADkVdmDmNMMVPgqLGwzzz765I.js, line 3266: unreachable code after return statement
+JavaScript warning: https://pagead2.googlesyndication.com/bg/wC0ySGIz5K7Ocf5aL2ADkVdmDmNMMVPgqLGwzzz765I.js, line 3266: unreachable code after return statement
+JavaScript warning: https://pagead2.googlesyndication.com/bg/wC0ySGIz5K7Ocf5aL2ADkVdmDmNMMVPgqLGwzzz765I.js, line 3266: unreachable code after return statement
+JavaScript warning: https://pagead2.googlesyndication.com/bg/wC0ySGIz5K7Ocf5aL2ADkVdmDmNMMVPgqLGwzzz765I.js, line 3266: unreachable code after return statement
+JavaScript warning: https://pagead2.googlesyndication.com/bg/wC0ySGIz5K7Ocf5aL2ADkVdmDmNMMVPgqLGwzzz765I.js, line 3266: unreachable code after return statement
+JavaScript warning: https://pagead2.googlesyndication.com/bg/wC0ySGIz5K7Ocf5aL2ADkVdmDmNMMVPgqLGwzzz765I.js line 2 > eval, line 3266: unreachable code after return statement
+JavaScript warning: https://pagead2.googlesyndication.com/bg/wC0ySGIz5K7Ocf5aL2ADkVdmDmNMMVPgqLGwzzz765I.js line 2 > eval, line 1: unreachable code after return statement
+JavaScript warning: https://pagead2.googlesyndication.com/bg/wC0ySGIz5K7Ocf5aL2ADkVdmDmNMMVPgqLGwzzz765I.js line 2 > eval line 3266 > eval, line 1: unreachable code after return statement
+JavaScript warning: https://pagead2.googlesyndication.com/bg/wC0ySGIz5K7Ocf5aL2ADkVdmDmNMMVPgqLGwzzz765I.js line 2 > eval, line 3266: unreachable code after return statement
+JavaScript warning: https://pagead2.googlesyndication.com/bg/wC0ySGIz5K7Ocf5aL2ADkVdmDmNMMVPgqLGwzzz765I.js line 2 > eval, line 3266: unreachable code after return statement
+JavaScript warning: https://pagead2.googlesyndication.com/bg/wC0ySGIz5K7Ocf5aL2ADkVdmDmNMMVPgqLGwzzz765I.js line 2 > eval line 3266 > eval line 1 > eval, line 1: unreachable code after return statement
+JavaScript warning: https://pagead2.googlesyndication.com/bg/wC0ySGIz5K7Ocf5aL2ADkVdmDmNMMVPgqLGwzzz765I.js line 2 > eval line 3266 > eval line 1 > eval line 1 > eval, line 1: unreachable code after return statement
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 153 of the JSON data
+JavaScript error: https://ajs-assets.ftstatic.com/ftUtils.js line 1 > Function, line 6: SecurityError: Permission denied to access property "document" on cross-origin object
+JavaScript error: https://ajs-assets.ftstatic.com/ftUtils.js line 1 > Function, line 6: SecurityError: Permission denied to access property "document" on cross-origin object
+JavaScript error: https://aax-events-cell02-cf.ap-southeast.aps.axp.amazon-adsystem.com/e/dtb/admi?b=JG56wRTjlFxPzoBFcLyI59sAAAGdjNYRJQUAAAJYAUFhcHNfdHhuX2JpZDEgICBhcHNfdHhuX2ltcDEgICAhJdPB&rnd=1875234022121776184334985&pp=wu53pc&p=n717nk&crid=29239961, line 89: SecurityError: Permission denied to access property "addEventListener" on cross-origin object
+1776184347765	Marionette	INFO	Stopped listening on port 51668
+JavaScript warning: https://ajs-assets.ftstatic.com/ftUtils.js, line 1: Script terminated by timeout at:
+impressionWatcher/<@https://ajs-assets.ftstatic.com/ftUtils.js:1:37836
+
+console.warn: TopSitesFeed: Failed to fetch data from MARS server: NetworkError when attempting to fetch resource.
+JavaScript error: , line 0: TypeError: NetworkError when attempting to fetch resource.
+JavaScript error: , line 0: TypeError: NetworkError when attempting to fetch resource.
+JavaScript error: , line 0: TypeError: NetworkError when attempting to fetch resource.
+JavaScript error: , line 0: TypeError: NetworkError when attempting to fetch resource.
+JavaScript error: , line 0: TypeError: NetworkError when attempting to fetch resource.
+JavaScript error: , line 0: TypeError: NetworkError when attempting to fetch resource.
+JavaScript error: , line 0: TypeError: NetworkError when attempting to fetch resource.
+console.error: Translations: "Failed to run language detection." (new AbortError("Actor 'Translations' destroyed before query 'Translations:GetDocumentElementLang' was resolved", (void 0), 587))
+1776184358974	Marionette	INFO	Stopped listening on port 51403
+console.warn: TopSitesFeed: Failed to fetch data from MARS server: NetworkError when attempting to fetch resource.
+console.error: Translations: "Failed to run language detection." (new AbortError("Actor 'Translations' destroyed before query 'Translations:GetDocumentElementLang' was resolved", (void 0)))
+1776184390888	Marionette	INFO	Stopped listening on port 52404
+JavaScript warning: https://ajs-assets.ftstatic.com/ftUtils.js, line 1: Script terminated by timeout at:
+impressionWatcher/<@https://ajs-assets.ftstatic.com/ftUtils.js:1:37836
+
+console.warn: TopSitesFeed: Failed to fetch data from MARS server: NetworkError when attempting to fetch resource.
+JavaScript error: , line 0: TypeError: NetworkError when attempting to fetch resource.
+JavaScript error: , line 0: TypeError: NetworkError when attempting to fetch resource.
+JavaScript error: , line 0: TypeError: NetworkError when attempting to fetch resource.
+JavaScript error: , line 0: TypeError: NetworkError when attempting to fetch resource.
+console.error: Translations: "Failed to run language detection." (new AbortError("Actor 'Translations' destroyed before query 'Translations:GetDocumentElementLang' was resolved", (void 0)))
+JavaScript error: , line 0: TypeError: NetworkError when attempting to fetch resource.
+JavaScript error: , line 0: TypeError: NetworkError when attempting to fetch resource.

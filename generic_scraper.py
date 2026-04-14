@@ -62,6 +62,7 @@ def _set_status(session_id: str, status: str):
 def _make_driver():
     """Create a headless Firefox instance using the same env-aware logic."""
     options = FirefoxOptions()
+    options.page_load_strategy = 'eager'  # Do not wait for heavy ads and tracking scripts
     display_available = bool(os.environ.get("DISPLAY", "").strip())
     force_headless = os.environ.get("HEADLESS", "").strip() in {"1", "true", "True", "yes", "YES"}
     force_no_headless = os.environ.get("HEADLESS", "").strip() in {"0", "false", "False", "no", "NO"}
@@ -71,27 +72,48 @@ def _make_driver():
     options.set_preference("browser.cache.memory.enable", False)
     options.set_preference("network.http.use-cache", False)
     driver = webdriver.Firefox(options=options)
-    driver.set_page_load_timeout(60)
-    driver.set_script_timeout(60)
+    driver.set_page_load_timeout(30)   # Timeouts handled gracefully now
+    driver.set_script_timeout(30)
     return driver
 
 
-def _extract_tables(driver) -> list[list[str]]:
+def _extract_generic_content(driver) -> list[list[str]]:
     """
-    Extract all rows from all <table> elements on the current page.
-    Returns a flat list of rows (each row is a list of cell strings).
-    Includes a header row per table prefixed with the table index.
+    Extracts headings, paragraphs, meaningful links, and tables from any webpage.
+    Returns formatting: [Content Type, Text/Data, Extra Info (e.g. Link)]
     """
+    all_data = []
+
+    # 1. Extract Headings (Headline News)
+    for tag in ['h1', 'h2', 'h3']:
+        for e in driver.find_elements(By.TAG_NAME, tag):
+            text = e.text.strip()
+            if text:
+                all_data.append([tag.upper(), text, ""])
+
+    # 2. Extract Paragraphs (Article Body)
+    for e in driver.find_elements(By.TAG_NAME, 'p'):
+        text = e.text.strip()
+        if text and len(text) > 15: # Skip tiny UI fragments
+            all_data.append(["Paragraph", text, ""])
+
+    # 3. Extract Meaningful Links (Navigation / Related Articles)
+    for e in driver.find_elements(By.TAG_NAME, 'a'):
+        text = e.text.strip()
+        href = e.get_attribute('href')
+        if text and href and href.startswith('http') and len(text) > 10:
+            all_data.append(["Link", text, href])
+
+    # 4. Extract Tables (Data)
     tables = driver.find_elements(By.TAG_NAME, "table")
-    all_rows = []
     for t_idx, table in enumerate(tables):
-        rows = table.find_elements(By.TAG_NAME, "tr")
-        for row in rows:
+        for r_idx, row in enumerate(table.find_elements(By.TAG_NAME, "tr")):
             cells = row.find_elements(By.XPATH, ".//th | .//td")
-            text_cells = [c.text.strip() for c in cells]
-            if any(text_cells):          # skip fully empty rows
-                all_rows.append([f"[T{t_idx+1}]"] + text_cells)
-    return all_rows
+            text_cells = " | ".join([c.text.strip() for c in cells if c.text.strip()])
+            if text_cells:
+                all_data.append([f"Table {t_idx+1}", text_cells, f"Row {r_idx+1}"])
+
+    return all_data
 
 
 def _has_datatable(driver) -> bool:
@@ -138,20 +160,25 @@ def run_generic_scraper(session_id: str, url: str, stop_event: threading.Event):
         _log(session_id, f"Opening URL: {url}")
         _set_status(session_id, "LOADING")
         driver = _make_driver()
-        driver.get(url)
-
-        # Wait for at least one table to appear (max 20 s)
+        
         try:
-            WebDriverWait(driver, 20).until(
-                EC.presence_of_element_located((By.TAG_NAME, "table"))
+            driver.get(url)
+        except TimeoutException:
+            _log(session_id, "Page load timed out (heavy ads/scripts). Forcing extract on loaded elements...")
+            # We explicitly catch this and continue because the DOM is usually partially loaded by now.
+
+        # Wait up to 10 seconds for the body tag to be somewhat populated
+        try:
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.TAG_NAME, "body"))
             )
         except TimeoutException:
-            _log(session_id, "No <table> found on page within 20 s. Aborting.")
+            _log(session_id, "No <body> found or page completely dead. Aborting.")
             _set_status(session_id, "ERROR")
-            generic_sessions[session_id]["error"] = "No table found on page."
+            generic_sessions[session_id]["error"] = "Website failed to load structure."
             return
 
-        _log(session_id, "Table(s) detected. Starting extraction.")
+        _log(session_id, "Page loaded successfully. Starting extraction.")
         _set_status(session_id, "RUNNING")
 
         is_datatable = _has_datatable(driver)
@@ -165,10 +192,10 @@ def run_generic_scraper(session_id: str, url: str, stop_event: threading.Event):
 
             while not stop_event.is_set():
                 time.sleep(0.8)   # let DOM settle after page change
-                rows = _extract_tables(driver)
+                rows = _extract_generic_content(driver)
 
                 if not header_written:
-                    writer.writerow(["Table", "Data..."])  # generic header
+                    writer.writerow(["Content Type", "Extracted Data", "Extra Info / Link"])
                     header_written = True
 
                 for row in rows:
