@@ -347,6 +347,29 @@ def remove_generic_session(session_id: str) -> str:
     return ""
 
 
+def flush_all_generics() -> str:
+    """Stops all sessions, wipes memory, and deletes all generic_*.csv files."""
+    import glob
+    with _sessions_lock:
+        for sess in generic_sessions.values():
+            if sess["is_running"]:
+                stop_event: threading.Event = sess.get("stop_event")
+                if stop_event:
+                    stop_event.set()
+        
+        generic_sessions.clear()
+
+    # Give threads a tiny bit of time to yield
+    time.sleep(0.5)
+
+    for f in glob.glob("generic_*.csv"):
+        try:
+            os.remove(f)
+        except Exception:
+            pass
+    return ""
+
+
 def get_sessions_snapshot() -> list[dict]:
     """Returns a JSON-safe snapshot of all sessions (no threading objects)."""
     with _sessions_lock:

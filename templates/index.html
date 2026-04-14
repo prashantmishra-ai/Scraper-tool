@@ -82,9 +82,12 @@
     <!-- ══════════════════════════════════════════════════════════════════ -->
     <!--  SECTION 2 — Generic Multi-site Scraper                           -->
     <!-- ══════════════════════════════════════════════════════════════════ -->
-    <section class="section-label" style="margin-top:8px;">
-        <span class="section-tag tag-generic">Generic Scraper</span>
-        <span class="section-desc">Paste any URL — extracts all table data simultaneously</span>
+    <section class="section-label" style="margin-top:8px; display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <span class="section-tag tag-generic">Generic Scraper</span>
+            <span class="section-desc">Paste any URL — extracts all table data simultaneously</span>
+        </div>
+        <button class="btn btn-danger btn-sm" onclick="flushAllGenericSessions()">🧹 Flush All Data</button>
     </section>
 
     <section class="panel">

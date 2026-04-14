@@ -289,6 +289,16 @@ async function removeGenericSession(id) {
     } catch { setGenericMessage("Could not reach remove endpoint.", true); }
 }
 
+async function flushAllGenericSessions() {
+    if (!confirm("Are you sure you want to stop all active generic scrapers and PERMANENTLY delete their data on the server?")) return;
+    try {
+        const res = await fetch(`/api/generic/flush`, { method: "DELETE" });
+        const data = await res.json();
+        if (!res.ok) setGenericMessage(data.message || "Flush failed.", true);
+        else { setGenericMessage("✓ All generic scrapers and data wiped clean."); fetchGenericSessions(); }
+    } catch { setGenericMessage("Could not reach flush endpoint.", true); }
+}
+
 function downloadGenericCsv(id) {
     window.location.href = `/api/generic/${id}/download`;
 }

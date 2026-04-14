@@ -13279,3 +13279,61 @@ JavaScript warning: https://www.googletagmanager.com/gtm.js?id=GTM-P528B3&gtm_au
 console.warn: TopSitesFeed: Failed to fetch data from MARS server: NetworkError when attempting to fetch resource.
 console.error: Translations: "Failed to run language detection." (new AbortError("Actor 'Translations' destroyed before query 'Translations:GetDocumentElementLang' was resolved", (void 0)))
 JavaScript error: resource://gre/modules/Sqlite.sys.mjs, line 1128: Error: Connection is not open.
+1776186104867	geckodriver	INFO	Listening on 127.0.0.1:55895
+1776186105374	mozrunner::runner	INFO	Running command: MOZ_CRASHREPORTER="1" MOZ_CRASHREPORTER_NO_REPORT="1" MOZ_CRASHREPORTER_SHUTDOWN="1" "/Users/innovativus/.ca ... s" "localhost" "-foreground" "-no-remote" "-profile" "/var/folders/gj/l2_w5kq910162j0llnv7p8zc0000gn/T/rust_mozprofilelptPRL"
+*** You are running in headless mode.
+1776186106183	Marionette	INFO	Marionette enabled
+1776186106490	Marionette	INFO	Listening on port 55904
+Read port: 55904
+WebDriver BiDi listening on ws://127.0.0.1:55896
+1776186106746	RemoteAgent	WARN	TLS certificate errors will be ignored for this session
+[GFX1-]: RenderCompositorSWGL failed mapping default framebuffer, no dt
+JavaScript warning: https://www.aajtak.in/, line 1871: unreachable code after return statement
+console.error: "Experiment visual-card-updates has unknown featureId: newtabRefinedCardsLayout"
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 153 of the JSON data
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 153 of the JSON data
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 153 of the JSON data
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 153 of the JSON data
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 153 of the JSON data
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 153 of the JSON data
+JavaScript warning: https://pagead2.googlesyndication.com/bg/wC0ySGIz5K7Ocf5aL2ADkVdmDmNMMVPgqLGwzzz765I.js, line 3044: unreachable code after return statement
+JavaScript warning: https://pagead2.googlesyndication.com/bg/wC0ySGIz5K7Ocf5aL2ADkVdmDmNMMVPgqLGwzzz765I.js, line 3044: unreachable code after return statement
+JavaScript warning: https://pagead2.googlesyndication.com/bg/wC0ySGIz5K7Ocf5aL2ADkVdmDmNMMVPgqLGwzzz765I.js, line 3044: unreachable code after return statement
+JavaScript warning: https://pagead2.googlesyndication.com/bg/wC0ySGIz5K7Ocf5aL2ADkVdmDmNMMVPgqLGwzzz765I.js, line 3044: unreachable code after return statement
+JavaScript warning: https://pagead2.googlesyndication.com/bg/wC0ySGIz5K7Ocf5aL2ADkVdmDmNMMVPgqLGwzzz765I.js, line 3044: unreachable code after return statement
+JavaScript warning: https://pagead2.googlesyndication.com/bg/wC0ySGIz5K7Ocf5aL2ADkVdmDmNMMVPgqLGwzzz765I.js, line 3044: unreachable code after return statement
+JavaScript warning: https://pagead2.googlesyndication.com/bg/wC0ySGIz5K7Ocf5aL2ADkVdmDmNMMVPgqLGwzzz765I.js line 2 > eval, line 3044: unreachable code after return statement
+JavaScript warning: https://pagead2.googlesyndication.com/bg/wC0ySGIz5K7Ocf5aL2ADkVdmDmNMMVPgqLGwzzz765I.js line 2 > eval line 3044 > eval, line 1: unreachable code after return statement
+JavaScript warning: https://pagead2.googlesyndication.com/bg/wC0ySGIz5K7Ocf5aL2ADkVdmDmNMMVPgqLGwzzz765I.js line 2 > eval line 3044 > eval line 1 > eval, line 1: unreachable code after return statement
+JavaScript warning: https://pagead2.googlesyndication.com/bg/wC0ySGIz5K7Ocf5aL2ADkVdmDmNMMVPgqLGwzzz765I.js line 2 > eval, line 3044: unreachable code after return statement
+JavaScript warning: https://pagead2.googlesyndication.com/bg/wC0ySGIz5K7Ocf5aL2ADkVdmDmNMMVPgqLGwzzz765I.js line 2 > eval, line 3044: unreachable code after return statement
+JavaScript warning: https://pagead2.googlesyndication.com/bg/wC0ySGIz5K7Ocf5aL2ADkVdmDmNMMVPgqLGwzzz765I.js line 2 > eval line 3044 > eval line 1 > eval, line 1: unreachable code after return statement
+JavaScript warning: https://pagead2.googlesyndication.com/bg/wC0ySGIz5K7Ocf5aL2ADkVdmDmNMMVPgqLGwzzz765I.js line 2 > eval line 3044 > eval line 1 > eval line 1 > eval, line 1: unreachable code after return statement
+JavaScript error: https://aax-events-cell02-cf.ap-southeast.aps.axp.amazon-adsystem.com/e/dtb/admi?b=JNm4Egn0K2frp3AwumtI0P0AAAGdjPEvlQUAAAJYAUFhcHNfdHhuX2JpZDEgICBhcHNfdHhuX2ltcDEgICBbYUQ9&rnd=4979010806311776186112234&pp=1yklvr4&p=n717nk&crid=29239865, line 6: TypeError: can't access property "getHighEntropyValues", navigator.userAgentData is undefined
+JavaScript error: https://ajs-assets.ftstatic.com/ftUtils.js line 1 > Function, line 6: SecurityError: Permission denied to access property "document" on cross-origin object
+JavaScript error: https://ajs-assets.ftstatic.com/ftUtils.js line 1 > Function, line 6: SecurityError: Permission denied to access property "document" on cross-origin object
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 153 of the JSON data
+JavaScript error: https://aax-events-cell02-cf.ap-southeast.aps.axp.amazon-adsystem.com/e/dtb/admi?b=JNm4Egn0K2frp3AwumtI0P0AAAGdjPEvlQUAAAJYAUFhcHNfdHhuX2JpZDEgICBhcHNfdHhuX2ltcDEgICBbYUQ9&rnd=4979010806311776186112234&pp=1yklvr4&p=n717nk&crid=29239865, line 89: SecurityError: Permission denied to access property "addEventListener" on cross-origin object
+1776186124971	Marionette	INFO	Stopped listening on port 55904
+console.warn: TopSitesFeed: Failed to fetch data from MARS server: NetworkError when attempting to fetch resource.
+JavaScript error: , line 0: TypeError: NetworkError when attempting to fetch resource.
+JavaScript error: , line 0: TypeError: NetworkError when attempting to fetch resource.
+JavaScript error: , line 0: TypeError: NetworkError when attempting to fetch resource.
+console.error: Translations: "Failed to run language detection." (new AbortError("Actor 'Translations' destroyed before query 'Translations:GetDocumentElementLang' was resolved", (void 0)))
+JavaScript error: , line 0: TypeError: NetworkError when attempting to fetch resource.
+1776186258529	geckodriver	INFO	Listening on 127.0.0.1:56441
+1776186259040	mozrunner::runner	INFO	Running command: MOZ_CRASHREPORTER="1" MOZ_CRASHREPORTER_NO_REPORT="1" MOZ_CRASHREPORTER_SHUTDOWN="1" "/Users/innovativus/.ca ... s" "localhost" "-foreground" "-no-remote" "-profile" "/var/folders/gj/l2_w5kq910162j0llnv7p8zc0000gn/T/rust_mozprofilertIx8L"
+*** You are running in headless mode.
+1776186259931	Marionette	INFO	Marionette enabled
+1776186260253	Marionette	INFO	Listening on port 56450
+Read port: 56450
+WebDriver BiDi listening on ws://127.0.0.1:56442
+1776186260536	RemoteAgent	WARN	TLS certificate errors will be ignored for this session
+[GFX1-]: RenderCompositorSWGL failed mapping default framebuffer, no dt
+JavaScript warning: https://www.aajtak.in/, line 1871: unreachable code after return statement
+console.error: "Experiment visual-card-updates has unknown featureId: newtabRefinedCardsLayout"
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 153 of the JSON data
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 153 of the JSON data
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 153 of the JSON data
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 153 of the JSON data
+JavaScript error: , line 0: SyntaxError: JSON.parse: expected double-quoted property name at line 1 column 153 of the JSON data
