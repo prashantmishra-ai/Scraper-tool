@@ -18,6 +18,7 @@ import threading
 from datetime import datetime
 
 MAX_PAGES = 500          # Safety cap — stop after this many DataTable pages
+MAX_CRAWL_LINKS = 30     # Max internal links to visit during deep crawl
 MAX_LOG_LINES = 150
 MAX_CONCURRENT = 5       # Max simultaneous Firefox sessions
 
@@ -147,7 +148,7 @@ def _click_datatable_next(driver):
     return False
 
 
-def run_generic_scraper(session_id: str, url: str, stop_event: threading.Event):
+def run_generic_scraper(session_id: str, start_url: str, stop_event: threading.Event):
     """
     Core scraping function. Runs in its own thread.
     Writes results to generic_<session_id>.csv
@@ -156,68 +157,98 @@ def run_generic_scraper(session_id: str, url: str, stop_event: threading.Event):
     records = 0
     csv_path = generic_sessions[session_id]["csv_path"]
 
+    queue = [start_url]
+    visited = set()
+    is_datatable = False
+
     try:
-        _log(session_id, f"Opening URL: {url}")
-        _set_status(session_id, "LOADING")
         driver = _make_driver()
-        
-        try:
-            driver.get(url)
-        except TimeoutException:
-            _log(session_id, "Page load timed out (heavy ads/scripts). Forcing extract on loaded elements...")
-            # We explicitly catch this and continue because the DOM is usually partially loaded by now.
-
-        # Wait up to 10 seconds for the body tag to be somewhat populated
-        try:
-            WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.TAG_NAME, "body"))
-            )
-        except TimeoutException:
-            _log(session_id, "No <body> found or page completely dead. Aborting.")
-            _set_status(session_id, "ERROR")
-            generic_sessions[session_id]["error"] = "Website failed to load structure."
-            return
-
-        _log(session_id, "Page loaded successfully. Starting extraction.")
-        _set_status(session_id, "RUNNING")
-
-        is_datatable = _has_datatable(driver)
-        _log(session_id, f"DataTables detected: {is_datatable}")
-
-        page_num = 1
         header_written = False
+
+        from urllib.parse import urlparse
+        base_domain = urlparse(start_url).netloc
 
         with open(csv_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
 
-            while not stop_event.is_set():
-                time.sleep(0.8)   # let DOM settle after page change
-                rows = _extract_generic_content(driver)
+            while queue and not stop_event.is_set():
+                url = queue.pop(0)
+                if url in visited: continue
+                visited.add(url)
 
-                if not header_written:
-                    writer.writerow(["Content Type", "Extracted Data", "Extra Info / Link"])
-                    header_written = True
+                _log(session_id, f"Opening URL ({len(visited)}/{len(visited)+len(queue)}): {url[:60]}")
+                _set_status(session_id, "RUNNING")
+                
+                try:
+                    driver.get(url)
+                except TimeoutException:
+                    _log(session_id, "Page load timed out (heavy ads/scripts). Forcing extract on loaded elements...")
 
-                for row in rows:
-                    writer.writerow(row)
-                    records += 1
+                # Wait up to 10 seconds for the body tag to be somewhat populated
+                try:
+                    WebDriverWait(driver, 10).until(
+                        EC.presence_of_element_located((By.TAG_NAME, "body"))
+                    )
+                except TimeoutException:
+                    _log(session_id, f"No <body> found on {url}. Skipping.")
+                    continue
 
-                with _sessions_lock:
-                    generic_sessions[session_id]["records"] = records
+                # On first page, check if Datatable
+                if len(visited) == 1:
+                    is_datatable = _has_datatable(driver)
+                    _log(session_id, f"DataTables detected: {is_datatable}")
 
-                _log(session_id, f"Page {page_num}: saved {len(rows)} rows (total {records}).")
+                # If NOT datatable, collect internal links on the first page
+                if len(visited) == 1 and not is_datatable:
+                    _log(session_id, "No DataTable found. Activating Deep Crawl mode...")
+                    links = driver.find_elements(By.TAG_NAME, 'a')
+                    collected = 0
+                    for a in links:
+                        href = a.get_attribute("href")
+                        if href and href.startswith("http") and base_domain in href and href not in queue and href != start_url:
+                            queue.append(href)
+                            collected += 1
+                            if collected >= MAX_CRAWL_LINKS:
+                                break
+                    _log(session_id, f"Queued {collected} internal links for deep scraping.")
 
-                # Pagination
-                if is_datatable and page_num < MAX_PAGES:
-                    if _datatable_next_enabled(driver):
-                        _click_datatable_next(driver)
-                        page_num += 1
-                        time.sleep(1)
+                page_num = 1
+                while not stop_event.is_set():
+                    time.sleep(1)   # let DOM settle
+                    rows = _extract_generic_content(driver)
+
+                    if not header_written:
+                        writer.writerow(["Content Type", "Extracted Data", "Extra Info / Link"])
+                        header_written = True
+
+                    # Add separator if crawling multiple pages
+                    if len(visited) > 1 and page_num == 1:
+                        writer.writerow(["---", "---", "---"])
+                        writer.writerow(["SOURCE URL", url, ""])
+
+                    for row in rows:
+                        writer.writerow(row)
+                        records += 1
+
+                    with _sessions_lock:
+                        generic_sessions[session_id]["records"] = records
+
+                    _log(session_id, f"Page {page_num}: saved {len(rows)} elements (total {records}).")
+
+                    # Pagination
+                    if is_datatable and page_num < MAX_PAGES:
+                        if _datatable_next_enabled(driver):
+                            _click_datatable_next(driver)
+                            page_num += 1
+                        else:
+                            _log(session_id, "Reached last DataTable page.")
+                            break
                     else:
-                        _log(session_id, "Reached last DataTable page.")
-                        break
-                else:
-                    break   # plain HTML table — single page
+                        break   # plain HTML / normal page — break inner pagination loop
+
+                # Pause to prevent IP ban while crawling
+                if queue:
+                    time.sleep(2)
 
         _log(session_id, f"Finished. {records} rows saved to {csv_path}.")
         _set_status(session_id, "FINISHED")
@@ -291,6 +322,26 @@ def stop_generic_session(session_id: str) -> str:
     if stop_event:
         stop_event.set()
         _set_status(session_id, "STOPPING")
+    return ""
+
+
+def remove_generic_session(session_id: str) -> str:
+    """Removes session from memory and deletes its CSV."""
+    with _sessions_lock:
+        sess = generic_sessions.get(session_id)
+        if not sess:
+            return "Session not found."
+        if sess["is_running"]:
+            return "Cannot remove a running session. Stop it first."
+        
+        csv_path = sess.get("csv_path", "")
+        if csv_path and os.path.exists(csv_path):
+            try:
+                os.remove(csv_path)
+            except Exception:
+                pass
+        
+        del generic_sessions[session_id]
     return ""
 
 

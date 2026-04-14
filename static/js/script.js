@@ -253,7 +253,7 @@ function buildCardHTML(sess) {
         <div class="g-actions">
             ${isRunning
                 ? `<button class="btn btn-danger btn-sm" onclick="stopGenericSession('${sess.session_id}')">■ Stop</button>`
-                : ""}
+                : `<button class="btn btn-ghost btn-sm" onclick="removeGenericSession('${sess.session_id}')">🗑 Remove</button>`}
             ${hasCsv
                 ? `<button class="btn btn-secondary btn-sm" onclick="downloadGenericCsv('${sess.session_id}')">⬇ CSV</button>`
                 : ""}
@@ -268,6 +268,16 @@ async function stopGenericSession(id) {
         if (!res.ok) setGenericMessage(data.message || "Stop failed.", true);
         else { setGenericMessage("Stop signal sent."); fetchGenericSessions(); }
     } catch { setGenericMessage("Could not reach stop endpoint.", true); }
+}
+
+async function removeGenericSession(id) {
+    if (!confirm("Remove this scraper and delete its data?")) return;
+    try {
+        const res = await fetch(`/api/generic/${id}/remove`, { method: "DELETE" });
+        const data = await res.json();
+        if (!res.ok) setGenericMessage(data.message || "Remove failed.", true);
+        else { setGenericMessage("Scraper removed."); fetchGenericSessions(); }
+    } catch { setGenericMessage("Could not reach remove endpoint.", true); }
 }
 
 function downloadGenericCsv(id) {

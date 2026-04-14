@@ -16,6 +16,7 @@ from isbn_scraper import (
 from generic_scraper import (
     start_generic_session,
     stop_generic_session,
+    remove_generic_session,
     get_sessions_snapshot,
     generic_sessions,
 )
@@ -132,6 +133,14 @@ def generic_stop(session_id):
     if err:
         return jsonify({"status": "error", "message": err}), 400
     return jsonify({"status": "success", "message": "Stop signal sent."})
+
+
+@app.route('/api/generic/<session_id>/remove', methods=['DELETE'])
+def generic_remove(session_id):
+    err = remove_generic_session(session_id)
+    if err:
+        return jsonify({"status": "error", "message": err}), 400
+    return jsonify({"status": "success", "message": "Session removed."})
 
 
 @app.route('/api/generic/<session_id>/download', methods=['GET'])
