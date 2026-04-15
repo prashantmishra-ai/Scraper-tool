@@ -7,10 +7,10 @@ from isbn_scraper import (
     run_scraper_thread,
     scraper_state,
     stop_event,
-    output_csv,
     load_checkpoint,
     log_event,
 )
+from db import isbn_collection, generic_collection
 
 # ── Generic scraper ────────────────────────────────────────────────────────────
 from generic_scraper import (
@@ -86,20 +86,41 @@ def get_status():
     payload = dict(scraper_state)
     payload["checkpoint_next_page"] = checkpoint.get("next_page", 1)
     payload["checkpoint_total_records"] = checkpoint.get("total_records", 0)
-    payload["csv_exists"] = os.path.exists(output_csv)
-    payload["csv_size_mb"] = round(os.path.getsize(output_csv) / (1024 * 1024), 2) if os.path.exists(output_csv) else 0
+    
+    total_docs = isbn_collection.count_documents({})
+    payload["csv_exists"] = total_docs > 0
+    payload["csv_size_mb"] = round(total_docs * 0.0005, 2) # rough mock estimate
     return jsonify(payload)
 
 
 @app.route('/api/download', methods=['GET'])
 def download_data():
-    if not os.path.exists(output_csv):
+    total = isbn_collection.count_documents({})
+    if total == 0:
         return jsonify({"status": "error", "message": "No data available yet"}), 404
-    return send_file(
-        output_csv,
-        mimetype='text/csv',
-        download_name='isbn_full_data.csv',
-        as_attachment=True,
+        
+    def generate():
+        import csv
+        from io import StringIO
+        output = StringIO()
+        writer = csv.writer(output)
+        columns = ["#", "Book Title", "ISBN", "Product Form", "Language", "Applicant Type", "Name of Publishing Agency/Publisher", "Imprint", "Name of Author/Editor", "Publication Date"]
+        writer.writerow(columns)
+        yield output.getvalue()
+        output.seek(0)
+        output.truncate(0)
+        
+        for doc in isbn_collection.find():
+            writer.writerow([doc.get(col, "") for col in columns])
+            yield output.getvalue()
+            output.seek(0)
+            output.truncate(0)
+            
+    from flask import Response
+    return Response(
+        generate(), 
+        mimetype='text/csv', 
+        headers={"Content-Disposition": "attachment; filename=isbn_full_data.csv"}
     )
 
 
@@ -157,16 +178,34 @@ def generic_download(session_id):
     sess = generic_sessions.get(session_id)
     if not sess:
         return jsonify({"status": "error", "message": "Session not found."}), 404
-    csv_path = sess.get("csv_path", "")
-    if not csv_path or not os.path.exists(csv_path):
+        
+    count = generic_collection.count_documents({"session_id": session_id})
+    if count == 0:
         return jsonify({"status": "error", "message": "No data available yet."}), 404
 
     domain = sess["url"].replace("https://", "").replace("http://", "").split("/")[0]
-    return send_file(
-        csv_path,
-        mimetype='text/csv',
-        download_name=f'scraped_{domain}_{session_id}.csv',
-        as_attachment=True,
+
+    def generate_generic():
+        import csv
+        from io import StringIO
+        output = StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["Content Type", "Extracted Data", "Extra Info / Link"])
+        yield output.getvalue()
+        output.seek(0)
+        output.truncate(0)
+        
+        for doc in generic_collection.find({"session_id": session_id}):
+            writer.writerow([doc.get("content_type", ""), doc.get("extracted_data", ""), doc.get("extra_info", "")])
+            yield output.getvalue()
+            output.seek(0)
+            output.truncate(0)
+
+    from flask import Response
+    return Response(
+        generate_generic(), 
+        mimetype='text/csv', 
+        headers={"Content-Disposition": f"attachment; filename=scraped_{domain}_{session_id}.csv"}
     )
 
 

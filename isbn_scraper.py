@@ -7,8 +7,8 @@ from selenium.common.exceptions import StaleElementReferenceException, Unexpecte
 import time
 import random
 import os
-import csv
 import threading
+from db import isbn_collection
 import json
 from datetime import datetime, timezone
 
@@ -27,9 +27,7 @@ MAX_CONSECUTIVE_ERRORS = 6
 
 # ── Heavy Duty Configuration ─────────────────────────────────────────
 
-# WE MUST USE CSV: Excel has a hard limit of 1,048,576 rows.
-# 34k pages x 50 rows = 1.7 million rows, which will CRASH Excel completely!
-output_csv = "isbn_full_data.csv"
+# We are now using MongoDB to store all records, avoiding file limits and locking issues entirely.
 checkpoint_file = "scraper_state.json"
 
 expected_columns = [
@@ -78,11 +76,7 @@ def save_checkpoint(*, next_page, total_records, last_error=""):
         f.write("\n")
     os.replace(tmp_path, checkpoint_file)
 
-# Write headers if file doesn't exist
-if not os.path.exists(output_csv):
-    with open(output_csv, mode='w', newline='', encoding='utf-8') as f:
-        writer = csv.writer(f)
-        writer.writerow(expected_columns)
+# Storage migrated to MongoDB.
 
 page_num = 1
 total_collected = 0
@@ -219,14 +213,22 @@ def run_scraper(start_page):
                         cols = row.find_elements(By.TAG_NAME, "td")
                         page_data.append([c.text.strip() for c in cols])
 
-                    # Save directly to disk instantly
-                    with open(output_csv, mode='a', newline='', encoding='utf-8') as f:
-                        writer = csv.writer(f)
-                        for item in page_data:
-                            if item:
-                                writer.writerow(item)
-                                total_collected_this_run += 1
-                                scraper_state["total_records"] += 1
+                    # Save directly to MongoDB instantly
+                    docs = []
+                    for item in page_data:
+                        if item:
+                            # Map array fields to Dictionary using expected_columns
+                            doc = {
+                                expected_columns[i]: (item[i] if i < len(item) else "")
+                                for i in range(len(expected_columns))
+                            }
+                            docs.append(doc)
+                    
+                    if docs:
+                        isbn_collection.insert_many(docs)
+                        added = len(docs)
+                        total_collected_this_run += added
+                        scraper_state["total_records"] += added
                     
                     log_event(f"Page {page_num} scraped and saved.")
                     # Persist progress: resume from the *next* page.

@@ -11,7 +11,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.firefox.options import Options as FirefoxOptions
 from selenium.common.exceptions import WebDriverException, TimeoutException
-import csv
+from db import generic_collection
 import os
 import time
 import threading
@@ -36,7 +36,6 @@ def _make_session(session_id: str, url: str) -> dict:
         "records": 0,
         "logs": [],
         "is_running": True,
-        "csv_path": f"generic_{session_id}.csv",
         "error": "",
         "started_at": datetime.now().strftime("%H:%M:%S"),
     }
@@ -155,7 +154,6 @@ def run_generic_scraper(session_id: str, start_url: str, mode: str, stop_event: 
     """
     driver = None
     records = 0
-    csv_path = generic_sessions[session_id]["csv_path"]
 
     queue = [start_url]
     visited = set()
@@ -168,10 +166,7 @@ def run_generic_scraper(session_id: str, start_url: str, mode: str, stop_event: 
         from urllib.parse import urlparse
         base_domain = urlparse(start_url).netloc
 
-        with open(csv_path, "w", newline="", encoding="utf-8-sig") as f:
-            writer = csv.writer(f)
-
-            while queue and not stop_event.is_set():
+        while queue and not stop_event.is_set():
                 url = queue.pop(0)
                 if url in visited: continue
                 visited.add(url)
@@ -219,18 +214,28 @@ def run_generic_scraper(session_id: str, start_url: str, mode: str, stop_event: 
                     time.sleep(1)   # let DOM settle
                     rows = _extract_generic_content(driver)
 
-                    if not header_written:
-                        writer.writerow(["Content Type", "Extracted Data", "Extra Info / Link"])
-                        header_written = True
-
-                    # Add separator if crawling multiple pages
                     if len(visited) > 1 and page_num == 1:
-                        writer.writerow(["---", "---", "---"])
-                        writer.writerow(["SOURCE URL", url, ""])
-
+                        sep_doc = {
+                            "session_id": session_id,
+                            "content_type": "SOURCE URL",
+                            "extracted_data": url,
+                            "extra_info": "---"
+                        }
+                        generic_collection.insert_one(sep_doc)
+                        
+                    docs = []
                     for row in rows:
-                        writer.writerow(row)
+                        doc = {
+                            "session_id": session_id,
+                            "content_type": row[0],
+                            "extracted_data": row[1],
+                            "extra_info": row[2]
+                        }
+                        docs.append(doc)
                         records += 1
+
+                    if docs:
+                        generic_collection.insert_many(docs)
 
                     with _sessions_lock:
                         generic_sessions[session_id]["records"] = records
@@ -249,10 +254,8 @@ def run_generic_scraper(session_id: str, start_url: str, mode: str, stop_event: 
                         break   # plain HTML / normal page — break inner pagination loop
 
                 # Pause to prevent IP ban while crawling
-                if queue:
-                    time.sleep(2)
-
-        _log(session_id, f"Finished. {records} rows saved to {csv_path}.")
+        # Loop ends here
+        _log(session_id, f"Finished. {records} rows saved to database.")
         _set_status(session_id, "FINISHED")
 
     except WebDriverException as e:
@@ -336,12 +339,11 @@ def remove_generic_session(session_id: str) -> str:
         if sess["is_running"]:
             return "Cannot remove a running session. Stop it first."
         
-        csv_path = sess.get("csv_path", "")
-        if csv_path and os.path.exists(csv_path):
-            try:
-                os.remove(csv_path)
-            except Exception:
-                pass
+        # Remove from MongoDB
+        try:
+            generic_collection.delete_many({"session_id": session_id})
+        except Exception:
+            pass
         
         del generic_sessions[session_id]
     return ""
@@ -362,11 +364,12 @@ def flush_all_generics() -> str:
     # Give threads a tiny bit of time to yield
     time.sleep(0.5)
 
-    for f in glob.glob("generic_*.csv"):
-        try:
-            os.remove(f)
-        except Exception:
-            pass
+    # Remove all generic data from MongoDB
+    try:
+        generic_collection.delete_many({})
+    except Exception:
+        pass
+        
     return ""
 
 
