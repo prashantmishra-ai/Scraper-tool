@@ -23,9 +23,14 @@ scraper_state = {
 }
 stop_event = threading.Event()
 MAX_LOG_LINES = 200
-MAX_CONSECUTIVE_ERRORS = 6
+MAX_CONSECUTIVE_ERRORS = 10  # Increased from 6 to 10 for better resilience
+MAX_SESSION_ERRORS = 3  # Max errors before recreating browser session
 
-# ── Heavy Duty Configuration ─────────────────────────────────────────
+# ── Heavy Duty Configuration for 70k+ Pages ──────────────────────────
+PAGES_PER_SESSION = 500  # Restart browser every 500 pages to prevent memory leaks
+BLOCKED_WAIT_TIME = 30  # Wait 60 seconds when blocked (increased from 30)
+ERROR_WAIT_TIME = 20  # Wait 20 seconds on error (increased from 15)
+CHECKPOINT_INTERVAL = 10  # Save checkpoint every 10 pages for safety
 
 # We are now using MongoDB to store all records, avoiding file limits and locking issues entirely.
 checkpoint_file = "scraper_state.json"
@@ -81,19 +86,27 @@ def save_checkpoint(*, next_page, total_records, last_error=""):
 page_num = 1
 total_collected = 0
 
-def run_scraper(start_page):
+def run_scraper(start_page, session_start_page=None):
     """
     Runs the scraper starting from a specific page.
+    
+    Args:
+        start_page: Page to start scraping from
+        session_start_page: Page where this browser session started (for session management)
+    
     Returns (last_successful_page, status_code)
     Status codes: 
         - "FINISHED": Reached the last page
         - "BLOCKED": Server blocked/rate limit alert
         - "ERROR": Any other unexpected exception
         - "STOPPED": User manually stopped
+        - "SESSION_LIMIT": Reached page limit for this browser session (restart needed)
     """
     driver = None
     page_num = start_page
     total_collected_this_run = 0
+    session_start = session_start_page or start_page
+    pages_in_session = 0
 
     try:
         options = FirefoxOptions()
@@ -199,11 +212,17 @@ def run_scraper(start_page):
             if stop_event.is_set():
                 log_event("Stop command received. Halting scraper from UI.")
                 return page_num, "STOPPED"
+            
+            # Check if we've reached session limit (prevent memory leaks)
+            pages_in_session = page_num - session_start + 1
+            if pages_in_session >= PAGES_PER_SESSION:
+                log_event(f"Reached {PAGES_PER_SESSION} pages in this session. Restarting browser for stability...")
+                return page_num, "SESSION_LIMIT"
                 
             scraper_state["current_page"] = page_num
 
             # Retry loop for StaleElementReferenceException
-            for attempt in range(3):
+            for attempt in range(5):  # Increased from 3 to 5 retries
                 try:
                     time.sleep(1)  # Give DataTables time to finish updating DOM
                     rows = driver.find_elements(By.XPATH, "//table[@id='examplenew']/tbody/tr")
@@ -213,7 +232,7 @@ def run_scraper(start_page):
                         cols = row.find_elements(By.TAG_NAME, "td")
                         page_data.append([c.text.strip() for c in cols])
 
-                    # Save directly to MongoDB instantly
+                    # Save directly to MongoDB instantly with retry logic
                     docs = []
                     for item in page_data:
                         if item:
@@ -225,39 +244,74 @@ def run_scraper(start_page):
                             docs.append(doc)
                     
                     if docs:
-                        isbn_collection.insert_many(docs)
-                        added = len(docs)
-                        total_collected_this_run += added
-                        scraper_state["total_records"] += added
+                        # Retry database insert up to 3 times
+                        for db_attempt in range(3):
+                            try:
+                                isbn_collection.insert_many(docs)
+                                added = len(docs)
+                                total_collected_this_run += added
+                                scraper_state["total_records"] += added
+                                break
+                            except Exception as db_err:
+                                if db_attempt == 2:
+                                    log_event(f"Database error after 3 attempts: {db_err}")
+                                    raise
+                                log_event(f"Database error (attempt {db_attempt + 1}/3), retrying...")
+                                time.sleep(2)
                     
-                    log_event(f"Page {page_num} scraped and saved.")
-                    # Persist progress: resume from the *next* page.
-                    save_checkpoint(
-                        next_page=page_num + 1,
-                        total_records=scraper_state["total_records"],
-                    )
+                    log_event(f"Page {page_num} scraped and saved ({len(docs)} records).")
+                    
+                    # Save checkpoint more frequently for long runs
+                    if page_num % CHECKPOINT_INTERVAL == 0:
+                        save_checkpoint(
+                            next_page=page_num + 1,
+                            total_records=scraper_state["total_records"],
+                        )
+                        log_event(f"Checkpoint saved at page {page_num}.")
+                    
                     break  # Success
                 except StaleElementReferenceException:
-                    if attempt == 2: raise
+                    if attempt == 4:  # Last attempt
+                        log_event(f"StaleElement error after {attempt + 1} attempts")
+                        raise
+                    log_event(f"StaleElement error, retry {attempt + 1}/5...")
+                    time.sleep(2)
+                    continue
+                except Exception as e:
+                    if attempt == 4:
+                        raise
+                    log_event(f"Error extracting data (attempt {attempt + 1}/5): {e}")
                     time.sleep(2)
                     continue
 
-            # Try clicking Next button
-            try:
-                next_btn = driver.find_element(By.ID, "examplenew_next")
-                if "disabled" in next_btn.get_attribute("class"):
-                    log_event("Reached the last page.")
-                    return page_num, "FINISHED"
+            # Try clicking Next button with retry logic
+            next_clicked = False
+            for click_attempt in range(3):
+                try:
+                    next_btn = driver.find_element(By.ID, "examplenew_next")
+                    if "disabled" in next_btn.get_attribute("class"):
+                        log_event("Reached the last page.")
+                        # Final checkpoint save
+                        save_checkpoint(
+                            next_page=page_num + 1,
+                            total_records=scraper_state["total_records"],
+                        )
+                        return page_num, "FINISHED"
 
-                # Use JS click to avoid 'element not interactable' errors
-                driver.execute_script("arguments[0].click();", next_btn)
-                page_num += 1
-                
-                # Randomized delay between clicks
-                time.sleep(random.uniform(0.5, 2))
-            except Exception as e:
-                log_event(f"Could not click Next: {e}")
-                return page_num, "ERROR"
+                    # Use JS click to avoid 'element not interactable' errors
+                    driver.execute_script("arguments[0].click();", next_btn)
+                    next_clicked = True
+                    page_num += 1
+                    
+                    # Randomized delay between clicks (slightly longer for stability)
+                    time.sleep(random.uniform(0.8, 2.5))
+                    break
+                except Exception as e:
+                    if click_attempt == 2:
+                        log_event(f"Could not click Next after 3 attempts: {e}")
+                        return page_num, "ERROR"
+                    log_event(f"Error clicking Next (attempt {click_attempt + 1}/3), retrying...")
+                    time.sleep(2)
 
     except UnexpectedAlertPresentException as e:
         log_event("Server blocked connection (rate limit/timeout).")
@@ -287,52 +341,90 @@ def run_scraper(start_page):
 
 def run_scraper_thread(start_page):
     current_page = start_page
+    session_start_page = start_page  # Track where current browser session started
     scraper_state["is_running"] = True
+    session_errors = 0  # Track errors in current session
+    
+    log_event(f"🚀 Starting ultra-resilient ISBN scraper for 70k+ pages")
+    log_event(f"📍 Starting from page {start_page}")
+    log_event(f"🔄 Browser will restart every {PAGES_PER_SESSION} pages")
+    log_event(f"💾 Checkpoints saved every {CHECKPOINT_INTERVAL} pages")
     
     while not stop_event.is_set():
         if scraper_state["status"] not in ["STOPPING", "STOPPED"]:
             scraper_state["status"] = "RUNNING"
             
-        last_page_attempted, status = run_scraper(current_page)
+        last_page_attempted, status = run_scraper(current_page, session_start_page)
         
         if status == "FINISHED":
-            log_event(f"All pages successfully scraped up to {last_page_attempted}.")
+            log_event(f"✅ All pages successfully scraped up to {last_page_attempted}.")
+            log_event(f"📊 Total records collected: {scraper_state['total_records']:,}")
             scraper_state["status"] = "FINISHED"
             scraper_state["consecutive_errors"] = 0
             break
+            
         elif status == "STOPPED":
-            log_event(f"Scraper stopped at page {last_page_attempted}.")
+            log_event(f"⏹️ Scraper stopped at page {last_page_attempted}.")
             scraper_state["status"] = "STOPPED"
             scraper_state["consecutive_errors"] = 0
             break
+            
+        elif status == "SESSION_LIMIT":
+            # Browser session limit reached - restart with fresh browser
+            log_event(f"🔄 Session limit reached. Restarting browser from page {last_page_attempted}...")
+            scraper_state["status"] = "RESTARTING SESSION"
+            scraper_state["consecutive_errors"] = 0
+            session_errors = 0
+            current_page = last_page_attempted
+            session_start_page = last_page_attempted
+            time.sleep(3)  # Brief pause before restarting
+            log_event(f"▶️ Resuming from page {current_page}...")
+            
         elif status == "BLOCKED":
-            wait_time = 30 # 30 seconds
-            log_event(f"Scraper blocked at page {last_page_attempted}. Waiting {wait_time}s before auto-restart.")
+            wait_time = BLOCKED_WAIT_TIME
+            log_event(f"🚫 Server blocked at page {last_page_attempted}. Waiting {wait_time}s before auto-restart.")
             scraper_state["status"] = "BLOCKED (Auto-restarting)"
             scraper_state["consecutive_errors"] = 0
+            session_errors = 0  # Reset session errors on block
             current_page = last_page_attempted
             
             # Use a fast sleep check so we can stop during the wait
-            for _ in range(wait_time * 2):
+            for i in range(wait_time * 2):
                 if stop_event.is_set():
                     break
+                if i % 10 == 0:  # Log every 5 seconds
+                    remaining = wait_time - (i // 2)
+                    log_event(f"⏳ Waiting... {remaining}s remaining")
                 time.sleep(0.5)
                 
             if stop_event.is_set():
                 break
                 
-            log_event(f"Auto-restarting from page {current_page}.")
+            log_event(f"▶️ Auto-restarting from page {current_page}.")
+            session_start_page = current_page  # Fresh session after block
+            
         elif status == "ERROR":
-            wait_time = 15 # 15 seconds
+            wait_time = ERROR_WAIT_TIME
             scraper_state["consecutive_errors"] += 1
+            session_errors += 1
+            
+            # Check if we should restart the browser session
+            if session_errors >= MAX_SESSION_ERRORS:
+                log_event(f"⚠️ {session_errors} errors in this session. Restarting browser...")
+                session_errors = 0
+                session_start_page = last_page_attempted
+                wait_time = 5  # Shorter wait for session restart
+            
             if scraper_state["consecutive_errors"] >= MAX_CONSECUTIVE_ERRORS:
                 scraper_state["status"] = "FAILED (manual restart required)"
                 log_event(
-                    f"Stopped after {scraper_state['consecutive_errors']} consecutive errors. "
+                    f"❌ Stopped after {scraper_state['consecutive_errors']} consecutive errors. "
                     f"Last error: {scraper_state['last_error']}"
                 )
+                log_event(f"💡 Tip: Check your internet connection and MongoDB status")
                 break
-            log_event(f"Error at page {last_page_attempted}. Retrying in {wait_time}s.")
+                
+            log_event(f"⚠️ Error at page {last_page_attempted} (error {scraper_state['consecutive_errors']}/{MAX_CONSECUTIVE_ERRORS}). Retrying in {wait_time}s.")
             scraper_state["status"] = "ERROR (Auto-restarting)"
             current_page = last_page_attempted
             
@@ -345,15 +437,18 @@ def run_scraper_thread(start_page):
             if stop_event.is_set():
                 break
 
-            log_event(f"Retrying page {current_page}.")
+            log_event(f"🔄 Retrying page {current_page}...")
+            
         else:
-            log_event(f"Unknown status '{status}' at page {last_page_attempted}. Exiting.")
+            log_event(f"❓ Unknown status '{status}' at page {last_page_attempted}. Exiting.")
             scraper_state["status"] = f"UNKNOWN ERROR: {status}"
             break
             
     scraper_state["is_running"] = False
     if scraper_state["status"] not in {"FINISHED", "FAILED (manual restart required)"}:
         scraper_state["status"] = "STOPPED"
+    
+    log_event(f"🏁 Scraper thread ended. Final status: {scraper_state['status']}")
 
 if __name__ == "__main__":
     ckpt = load_checkpoint()

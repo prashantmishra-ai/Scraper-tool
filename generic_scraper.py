@@ -17,10 +17,8 @@ import time
 import threading
 from datetime import datetime
 
-MAX_PAGES = 500          # Safety cap — stop after this many DataTable pages
-MAX_CRAWL_LINKS = 30     # Max internal links to visit during deep crawl
-MAX_LOG_LINES = 150
 MAX_CONCURRENT = 5       # Max simultaneous Firefox sessions
+# NO LIMITS on pages, links, or log lines - will run until task completion
 
 # ── Session registry ──────────────────────────────────────────────────────────
 # { session_id: { url, status, records, logs, is_running, csv_path, error } }
@@ -41,6 +39,29 @@ def _make_session(session_id: str, url: str) -> dict:
     }
 
 
+def _save_to_csv_fallback(session_id: str, docs: list):
+    """Fallback CSV writer when MongoDB is unavailable"""
+    import csv
+    import os
+    
+    csv_file = f"generic_{session_id}_fallback.csv"
+    file_exists = os.path.exists(csv_file)
+    
+    try:
+        with open(csv_file, 'a', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            if not file_exists:
+                writer.writerow(["Content Type", "Extracted Data", "Extra Info"])
+            for doc in docs:
+                writer.writerow([
+                    doc.get("content_type", ""),
+                    doc.get("extracted_data", ""),
+                    doc.get("extra_info", "")
+                ])
+    except Exception as e:
+        print(f"CSV fallback also failed: {e}")
+
+
 def _log(session_id: str, message: str):
     line = f"[{datetime.now().strftime('%H:%M:%S')}] {message}"
     print(f"[{session_id}] {message}")
@@ -49,8 +70,9 @@ def _log(session_id: str, message: str):
         if sess is None:
             return
         sess["logs"].append(line)
-        if len(sess["logs"]) > MAX_LOG_LINES:
-            sess["logs"] = sess["logs"][-MAX_LOG_LINES:]
+        # Keep last 200 logs for UI display (unlimited in console/database)
+        if len(sess["logs"]) > 200:
+            sess["logs"] = sess["logs"][-200:]
 
 
 def _set_status(session_id: str, status: str):
@@ -77,41 +99,169 @@ def _make_driver():
     return driver
 
 
-def _extract_generic_content(driver) -> list[list[str]]:
+def _extract_generic_content(driver, session_id: str) -> list[list[str]]:
     """
-    Extracts headings, paragraphs, meaningful links, and tables from any webpage.
-    Returns formatting: [Content Type, Text/Data, Extra Info (e.g. Link)]
+    Extracts ALL content via JavaScript in one shot — completely stale-element proof.
+    Groups: Heading → merged paragraphs → links → tables → next Heading
     """
     all_data = []
 
-    # 1. Extract Headings (Headline News)
-    for tag in ['h1', 'h2', 'h3']:
-        for e in driver.find_elements(By.TAG_NAME, tag):
-            text = e.text.strip()
-            if text:
-                all_data.append([tag.upper(), text, ""])
+    try:
+        raw = driver.execute_script("""
+        (function() {
+            var EXCLUDE_TAGS = new Set(['nav','header','footer','aside','script',
+                                        'style','iframe','ul','ol','li','noscript']);
+            var EXCLUDE_KW   = ['sidebar','ad-','advertisement','related','trending',
+                                'popular','widget','promo','banner','social','share',
+                                'comment','navigation','menu','breadcrumb','sponsored',
+                                'outbrain','taboola','recommend','disqus','livefyre',
+                                'facebook-comment','fb-comment','comment-section',
+                                'comment-box','comment-area','comment-list',
+                                'user-comment','reader-comment','discussion',
+                                'feedback','reply','replies','thread','conversation'];
+            var SKIP_START   = ['share','follow us','subscribe','advertisement',
+                                'sign up','log in','cookie','privacy policy','read more'];
 
-    # 2. Extract Paragraphs (Article Body)
-    for e in driver.find_elements(By.TAG_NAME, 'p'):
-        text = e.text.strip()
-        if text and len(text) > 15: # Skip tiny UI fragments
-            all_data.append(["Paragraph", text, ""])
+            function isExcluded(el) {
+                if (!el || el.nodeType !== 1) return true;
+                var tag = el.tagName.toLowerCase();
+                if (EXCLUDE_TAGS.has(tag)) return true;
+                var combined = ((el.className || '') + ' ' + (el.id || '')).toLowerCase();
+                for (var k = 0; k < EXCLUDE_KW.length; k++) {
+                    if (combined.indexOf(EXCLUDE_KW[k]) !== -1) return true;
+                }
+                return false;
+            }
 
-    # 3. Extract Meaningful Links (Navigation / Related Articles)
-    for e in driver.find_elements(By.TAG_NAME, 'a'):
-        text = e.text.strip()
-        href = e.get_attribute('href')
-        if text and href and href.startswith('http') and len(text) > 10:
-            all_data.append(["Link", text, href])
+            function hasExcludedAncestor(el) {
+                var p = el.parentElement;
+                while (p) {
+                    if (isExcluded(p)) return true;
+                    p = p.parentElement;
+                }
+                return false;
+            }
 
-    # 4. Extract Tables (Data)
-    tables = driver.find_elements(By.TAG_NAME, "table")
-    for t_idx, table in enumerate(tables):
-        for r_idx, row in enumerate(table.find_elements(By.TAG_NAME, "tr")):
-            cells = row.find_elements(By.XPATH, ".//th | .//td")
-            text_cells = " | ".join([c.text.strip() for c in cells if c.text.strip()])
-            if text_cells:
-                all_data.append([f"Table {t_idx+1}", text_cells, f"Row {r_idx+1}"])
+            function getY(el) {
+                var r = el.getBoundingClientRect();
+                return r.top + window.pageYOffset;
+            }
+
+            // Find best main container
+            var containerSelectors = [
+                'article', 'main', '[role="main"]',
+                '[class*="article"]', '[class*="story"]',
+                '[class*="post-body"]', '[class*="entry-content"]',
+                '[id*="article"]', '[id*="content"]', '[id*="story"]'
+            ];
+            var container = null;
+            for (var s = 0; s < containerSelectors.length; s++) {
+                var found = document.querySelector(containerSelectors[s]);
+                if (found) { container = found; break; }
+            }
+            if (!container) container = document.body;
+
+            // Collect headings
+            var headings = [];
+            var hTags = container.querySelectorAll('h1,h2,h3');
+            for (var i = 0; i < hTags.length; i++) {
+                var h = hTags[i];
+                if (hasExcludedAncestor(h)) continue;
+                var txt = h.innerText ? h.innerText.trim() : '';
+                if (txt.length > 5) {
+                    headings.push({ type: h.tagName + ' Heading', text: txt, y: getY(h), content: [] });
+                }
+            }
+            headings.sort(function(a,b){ return a.y - b.y; });
+
+            function findParent(y) {
+                var best = null;
+                for (var i = 0; i < headings.length; i++) {
+                    if (headings[i].y <= y) best = headings[i];
+                    else break;
+                }
+                return best;
+            }
+
+            // Collect paragraphs
+            var pTags = container.querySelectorAll('p');
+            for (var i = 0; i < pTags.length; i++) {
+                var p = pTags[i];
+                if (hasExcludedAncestor(p)) continue;
+                var txt = p.innerText ? p.innerText.trim() : '';
+                if (txt.length < 15) continue;
+                var lower = txt.toLowerCase();
+                var skip = false;
+                for (var k = 0; k < SKIP_START.length; k++) {
+                    if (lower.indexOf(SKIP_START[k]) === 0) { skip = true; break; }
+                }
+                if (skip) continue;
+                var y = getY(p);
+                var parent = findParent(y);
+                var item = { type: 'Paragraph', text: txt, extra: '', y: y };
+                if (parent) parent.content.push(item);
+            }
+
+            // Collect links
+            var aTags = container.querySelectorAll('a[href]');
+            var SKIP_LINK = ['share','tweet','facebook','subscribe','follow',
+                             'login','sign up','read more','click here'];
+            for (var i = 0; i < aTags.length; i++) {
+                var a = aTags[i];
+                if (hasExcludedAncestor(a)) continue;
+                var txt = a.innerText ? a.innerText.trim() : '';
+                var href = a.href || '';
+                if (!txt || txt.length < 15 || !href.startsWith('http')) continue;
+                var lower = txt.toLowerCase();
+                var skip = false;
+                for (var k = 0; k < SKIP_LINK.length; k++) {
+                    if (lower.indexOf(SKIP_LINK[k]) !== -1) { skip = true; break; }
+                }
+                if (skip) continue;
+                var y = getY(a);
+                var parent = findParent(y);
+                if (parent) parent.content.push({ type: 'Related Link', text: txt, extra: href, y: y });
+            }
+
+            // Build output: heading → merged paragraphs → links
+            var result = [];
+            for (var i = 0; i < headings.length; i++) {
+                var h = headings[i];
+                result.push([h.type, h.text, '']);
+                h.content.sort(function(a,b){ return a.y - b.y; });
+
+                var paras = [], links = [];
+                for (var j = 0; j < h.content.length; j++) {
+                    if (h.content[j].type === 'Paragraph') paras.push(h.content[j].text);
+                    else links.push(h.content[j]);
+                }
+                if (paras.length > 0) {
+                    result.push(['Article Content', paras.join(' '), '']);
+                }
+                for (var j = 0; j < links.length; j++) {
+                    result.push([links[j].type, links[j].text, links[j].extra]);
+                }
+            }
+
+            return result;
+        })();
+        """)
+
+        if raw:
+            all_data = [list(row) for row in raw]
+            para_count = sum(1 for r in all_data if r[0] == 'Article Content')
+            _log(session_id, f"  ✅ Extracted {len(all_data)} items ({para_count} article content blocks)")
+            if all_data:
+                for row in all_data:
+                    if row[0] == 'Article Content' and row[1]:
+                        preview = row[1][:120] + '...' if len(row[1]) > 120 else row[1]
+                        _log(session_id, f"  📄 Sample: {preview}")
+                        break
+        else:
+            _log(session_id, "  ⚠ No content extracted from page")
+
+    except Exception as e:
+        _log(session_id, f"  ✗ Extraction error: {e}")
 
     return all_data
 
@@ -150,112 +300,192 @@ def _click_datatable_next(driver):
 def run_generic_scraper(session_id: str, start_url: str, mode: str, stop_event: threading.Event):
     """
     Core scraping function. Runs in its own thread.
-    Writes results to generic_<session_id>.csv
+    
+    Mode 'single': Scrapes only the provided URL (no link following)
+    Mode 'deep': Extracts ALL links from the start page, then scrapes each link individually
+                 (opens link, scrapes ONLY that page's content, moves to next link)
+    
+    NO LIMITS - will run until all links are processed or user stops manually.
     """
     driver = None
     records = 0
 
-    queue = [start_url]
+    queue = []  # Start with empty queue
     visited = set()
     is_datatable = False
 
     try:
         driver = _make_driver()
-        header_written = False
 
         from urllib.parse import urlparse
         base_domain = urlparse(start_url).netloc
 
-        while queue and not stop_event.is_set():
-                url = queue.pop(0)
-                if url in visited: continue
-                visited.add(url)
+        # First, visit the start URL to collect links if in deep mode
+        if mode == "deep":
+            _log(session_id, f"Deep Crawl mode: Opening main page to collect all links...")
+            _set_status(session_id, "COLLECTING LINKS")
+            
+            try:
+                driver.get(start_url)
+            except TimeoutException:
+                _log(session_id, "Page load timed out. Forcing extract on loaded elements...")
 
-                _log(session_id, f"Opening URL ({len(visited)}/{len(visited)+len(queue)}): {url[:60]}")
-                _set_status(session_id, "RUNNING")
-                
-                try:
-                    driver.get(url)
-                except TimeoutException:
-                    _log(session_id, "Page load timed out (heavy ads/scripts). Forcing extract on loaded elements...")
+            try:
+                WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.TAG_NAME, "body"))
+                )
+            except TimeoutException:
+                _log(session_id, f"No <body> found on {start_url}. Aborting.")
+                _set_status(session_id, "ERROR")
+                return
 
-                # Wait up to 10 seconds for the body tag to be somewhat populated
-                try:
-                    WebDriverWait(driver, 10).until(
-                        EC.presence_of_element_located((By.TAG_NAME, "body"))
-                    )
-                except TimeoutException:
-                    _log(session_id, f"No <body> found on {url}. Skipping.")
+            # Collect ALL internal links from the main page (article links only)
+            _log(session_id, "Extracting all article links from main page...")
+            # Extract all hrefs via JS in one shot to avoid stale element errors
+            raw_hrefs = driver.execute_script("""
+                var anchors = document.querySelectorAll('a[href]');
+                var hrefs = [];
+                for (var i = 0; i < anchors.length; i++) {
+                    hrefs.push(anchors[i].href);
+                }
+                return hrefs;
+            """)
+            collected = 0
+            seen = set()
+            for href in (raw_hrefs or []):
+                if not href or not isinstance(href, str):
                     continue
+                href = href.split('#')[0].rstrip('/')  # strip fragments and trailing slash
+                if href and href.startswith("http") and base_domain in href:
+                    if href != start_url and href not in visited and href not in seen:
+                        seen.add(href)
+                        queue.append(href)
+                        collected += 1
+            
+            _log(session_id, f"✓ Collected {collected} article links. Starting individual scraping...")
+            _log(session_id, f"📰 Will scrape {len(queue)} articles")
+            
+            # Mark the main listing page as visited so we don't scrape it
+            visited.add(start_url)
+        else:
+            # Single mode - just scrape the provided URL
+            queue.append(start_url)
 
-                # On first page, check if Datatable
-                if len(visited) == 1:
-                    is_datatable = _has_datatable(driver)
-                    _log(session_id, f"DataTables detected: {is_datatable}")
+        # Now process each URL in the queue (article links only)
+        link_counter = 0
+        while queue and not stop_event.is_set():
+            url = queue.pop(0)
+            if url in visited:
+                continue
+            visited.add(url)
+            link_counter += 1
 
-                # If deep mode, collect internal links on the first page
-                if len(visited) == 1 and not is_datatable and mode == "deep":
-                    _log(session_id, "Deep Crawl mode activated. Collecting links...")
-                    links = driver.find_elements(By.TAG_NAME, 'a')
-                    collected = 0
-                    for a in links:
-                        href = a.get_attribute("href")
-                        if href and href.startswith("http") and base_domain in href and href not in queue and href != start_url:
-                            queue.append(href)
-                            collected += 1
-                            if collected >= MAX_CRAWL_LINKS:
-                                break
-                    _log(session_id, f"Queued {collected} internal links for deep scraping.")
-                elif len(visited) == 1 and mode == "single":
-                    _log(session_id, "Single Page mode activated. No deep crawling.")
+            _log(session_id, f"📰 [{link_counter}/{link_counter + len(queue)}] Opening article: {url[:80]}")
+            _set_status(session_id, "RUNNING")
+            
+            try:
+                driver.get(url)
+                _log(session_id, f"  ✓ Page loaded: {driver.title[:60]}")
+            except TimeoutException:
+                _log(session_id, "  ⚠ Page load timed out. Extracting available content...")
 
-                page_num = 1
-                while not stop_event.is_set():
-                    time.sleep(1)   # let DOM settle
-                    rows = _extract_generic_content(driver)
+            try:
+                WebDriverWait(driver, 15).until(  # Increased from 10 to 15 seconds
+                    EC.presence_of_element_located((By.TAG_NAME, "body"))
+                )
+                # Additional wait for article content to load
+                time.sleep(2)  # Give extra time for dynamic content
+            except TimeoutException:
+                _log(session_id, f"  ✗ No <body> found. Skipping this link.")
+                continue
 
-                    if len(visited) > 1 and page_num == 1:
-                        sep_doc = {
-                            "session_id": session_id,
-                            "content_type": "SOURCE URL",
-                            "extracted_data": url,
-                            "extra_info": "---"
-                        }
-                        generic_collection.insert_one(sep_doc)
-                        
-                    docs = []
-                    for row in rows:
-                        doc = {
-                            "session_id": session_id,
-                            "content_type": row[0],
-                            "extracted_data": row[1],
-                            "extra_info": row[2]
-                        }
-                        docs.append(doc)
-                        records += 1
+            # Check for DataTables only on first page
+            if len(visited) == 1:
+                is_datatable = _has_datatable(driver)
+                _log(session_id, f"DataTables detected: {is_datatable}")
 
-                    if docs:
-                        generic_collection.insert_many(docs)
+            # Scrape this page (with DataTable pagination if applicable)
+            page_num = 1
+            while not stop_event.is_set():
+                time.sleep(1)   # let DOM settle
+                
+                # Verify we're on the correct page
+                current_url = driver.current_url
+                _log(session_id, f"  📄 Extracting from: {current_url[:80]}")
+                
+                rows = _extract_generic_content(driver, session_id)
 
-                    with _sessions_lock:
-                        generic_sessions[session_id]["records"] = records
-
-                    _log(session_id, f"Page {page_num}: saved {len(rows)} elements (total {records}).")
-
-                    # Pagination
-                    if is_datatable and page_num < MAX_PAGES:
-                        if _datatable_next_enabled(driver):
-                            _click_datatable_next(driver)
-                            page_num += 1
+                # Add separator for each article
+                if page_num == 1:
+                    sep_doc = {
+                        "session_id": session_id,
+                        "content_type": "━━━ ARTICLE START ━━━",
+                        "extracted_data": url,
+                        "extra_info": f"Article {link_counter} of {link_counter + len(queue)}"
+                    }
+                    try:
+                        from db import is_db_connected
+                        if is_db_connected():
+                            generic_collection.insert_one(sep_doc)
                         else:
-                            _log(session_id, "Reached last DataTable page.")
-                            break
-                    else:
-                        break   # plain HTML / normal page — break inner pagination loop
+                            _save_to_csv_fallback(session_id, [sep_doc])
+                    except Exception as db_err:
+                        _log(session_id, f"Database connection issue: {db_err}")
+                        time.sleep(2)
+                        try:
+                            generic_collection.insert_one(sep_doc)
+                        except:
+                            pass  # Continue even if separator fails
+                    
+                docs = []
+                for row in rows:
+                    doc = {
+                        "session_id": session_id,
+                        "content_type": row[0],
+                        "extracted_data": row[1],
+                        "extra_info": row[2]
+                    }
+                    docs.append(doc)
+                    records += 1
 
-                # Pause to prevent IP ban while crawling
-        # Loop ends here
-        _log(session_id, f"Finished. {records} rows saved to database.")
+                if docs:
+                    try:
+                        from db import is_db_connected
+                        if is_db_connected():
+                            generic_collection.insert_many(docs)
+                            _log(session_id, f"  ✓ Saved {len(docs)} items to database")
+                        else:
+                            # Fallback: save to CSV if DB is down
+                            _save_to_csv_fallback(session_id, docs)
+                            _log(session_id, f"  ⚠ DB unavailable - saved {len(docs)} items to CSV fallback")
+                    except Exception as db_err:
+                        _log(session_id, f"  Database error: {db_err}. Saving to CSV fallback...")
+                        _save_to_csv_fallback(session_id, docs)
+                        time.sleep(1)
+
+                with _sessions_lock:
+                    generic_sessions[session_id]["records"] = records
+
+                _log(session_id, f"  Page {page_num}: {len(rows)} items extracted (total: {records})")
+
+                # Handle DataTable pagination (only if detected)
+                if is_datatable:
+                    if _datatable_next_enabled(driver):
+                        _click_datatable_next(driver)
+                        page_num += 1
+                    else:
+                        _log(session_id, "  Reached last DataTable page for this link.")
+                        break
+                else:
+                    # No DataTable - just scrape this single page and move on
+                    break
+
+            # Small delay between links to avoid overwhelming the server
+            if queue:  # Only delay if there are more links to process
+                time.sleep(0.5)
+
+        # All links processed
+        _log(session_id, f"✓ COMPLETED: Scraped {link_counter} links, {records} total records saved.")
         _set_status(session_id, "FINISHED")
 
     except WebDriverException as e:
