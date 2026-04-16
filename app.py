@@ -21,6 +21,7 @@ from generic_scraper import (
     flush_all_generics,
     get_sessions_snapshot,
     generic_sessions,
+    _normalize_generic_mode,
 )
 
 app = Flask(__name__)
@@ -133,7 +134,7 @@ def download_data():
 def generic_add():
     data = request.json or {}
     url = (data.get('url') or '').strip()
-    mode = data.get('mode', 'single')
+    mode = _normalize_generic_mode(data.get('mode', 'single'))
     if not url:
         return jsonify({"status": "error", "message": "URL is required."}), 400
     if not url.startswith(('http://', 'https://')):

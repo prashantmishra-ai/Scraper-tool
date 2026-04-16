@@ -23,6 +23,7 @@ import re
 
 MAX_CONCURRENT = 5       # Max simultaneous Firefox sessions
 # NO LIMITS on pages, links, or log lines - will run until task completion
+VALID_GENERIC_MODES = {"single", "deep", "frontpage_news"}
 
 # ── Session registry ──────────────────────────────────────────────────────────
 # { session_id: { url, status, records, logs, is_running, csv_path, error } }
@@ -48,6 +49,15 @@ def _make_session(session_id: str, url: str, mode: str = "single") -> dict:
         "error": "",
         "started_at": datetime.now().strftime("%H:%M:%S"),
     }
+
+
+def _normalize_generic_mode(mode: str) -> str:
+    normalized = (mode or "single").strip().lower()
+    if normalized in {"news", "frontpage", "front_page", "front-page", "homepage_news"}:
+        return "frontpage_news"
+    if normalized in VALID_GENERIC_MODES:
+        return normalized
+    return "single"
 
 
 def _save_to_csv_fallback(session_id: str, docs: list):
@@ -646,6 +656,166 @@ def _extract_candidate_links_from_page(driver, session_id: str, start_url: str) 
     return candidates
 
 
+def _looks_like_headline(text: str) -> bool:
+    cleaned = normalize_text(text or "")
+    if not cleaned:
+        return False
+
+    lowered = cleaned.lower()
+    if len(cleaned) < 8 or len(cleaned) > 260:
+        return False
+    if len(cleaned.split()) < 2:
+        return False
+
+    reject_tokens = (
+        "live tv", "watch live", "read more", "view more", "load more",
+        "newsletter", "subscribe", "advertisement", "sponsored", "share",
+        "follow us", "sign in", "login", "download app", "photo gallery",
+        "cookie policy", "privacy policy", "complaint redressal", "sitemap",
+        "follow us on", "download now", "popular categories", "language sites",
+        "network18 group sites", "app download", "notify you", "unsubscribe",
+        "skip"
+    )
+    if any(token in lowered for token in reject_tokens):
+        return False
+
+    return True
+
+
+def _scroll_frontpage_for_links(driver, session_id: str, max_steps: int = 8):
+    last_height = 0
+    stable_steps = 0
+
+    for step in range(max_steps):
+        try:
+            height = driver.execute_script("return Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);")
+        except Exception:
+            break
+
+        target = int(height * min(1, (step + 1) / max_steps))
+        try:
+            driver.execute_script("window.scrollTo(0, arguments[0]);", target)
+        except Exception:
+            break
+        time.sleep(0.9)
+
+        if height == last_height:
+            stable_steps += 1
+        else:
+            stable_steps = 0
+        last_height = height
+
+        if stable_steps >= 2:
+            break
+
+    try:
+        driver.execute_script("window.scrollTo(0, 0);")
+    except Exception:
+        pass
+    _log(session_id, "  ✓ Completed front-page scroll sweep for lazy-loaded story cards")
+
+
+def _collect_frontpage_visible_targets(driver, session_id: str, start_url: str, add_target):
+    from urllib.parse import urljoin
+
+    selectors = [
+        "article a[href]",
+        "main a[href]",
+        "[role='main'] a[href]",
+        "[class*='story'] a[href]",
+        "[class*='article'] a[href]",
+        "[class*='headline'] a[href]",
+        "[class*='title'] a[href]",
+        "[class*='card'] a[href]",
+        "[class*='news'] a[href]",
+        "h1 a[href], h2 a[href], h3 a[href], h4 a[href]",
+    ]
+
+    collected = 0
+    for selector in selectors:
+        try:
+            anchors = driver.find_elements(By.CSS_SELECTOR, selector)
+        except Exception:
+            continue
+
+        for anchor in anchors:
+            try:
+                href = anchor.get_attribute("href")
+                text = normalize_text(anchor.text or anchor.get_attribute("title") or anchor.get_attribute("aria-label") or "")
+                if not href:
+                    continue
+                if text and not _looks_like_headline(text):
+                    continue
+                if add_target(urljoin(start_url, href), text, source="visible"):
+                    collected += 1
+            except Exception:
+                continue
+
+    if collected:
+        _log(session_id, f"  ✓ Collected {collected} visible front-page article candidates")
+
+
+def _extract_frontpage_article_targets(driver, session_id: str, start_url: str) -> list[dict]:
+    from urllib.parse import urljoin, urlparse
+
+    base_domain = urlparse(start_url).netloc.lower()
+    targets = []
+    seen = set()
+    score_by_url = {}
+
+    def add_target(url: str, headline: str = "", source: str = "fallback"):
+        canonical = _canonicalize_url(url)
+        headline_text = normalize_text(headline or "")
+        if not canonical or canonical in seen:
+            return False
+        if not _is_article_url(canonical, base_domain):
+            return False
+        if source == "visible":
+            score_by_url[canonical] = score_by_url.get(canonical, 0) + 2
+        else:
+            score_by_url[canonical] = score_by_url.get(canonical, 0) + 1
+        seen.add(canonical)
+        targets.append({
+            "url": canonical,
+            "headline": headline_text,
+            "score": score_by_url[canonical],
+        })
+        return True
+
+    _scroll_frontpage_for_links(driver, session_id)
+    _collect_frontpage_visible_targets(driver, session_id, start_url, add_target)
+
+    for candidate in _extract_candidate_links_from_page(driver, session_id, start_url):
+        add_target(candidate, "", source="fallback")
+
+    deduped = {}
+    for target in targets:
+        existing = deduped.get(target["url"])
+        if not existing:
+            deduped[target["url"]] = dict(target)
+            continue
+        if target.get("headline") and not existing.get("headline"):
+            existing["headline"] = target["headline"]
+        existing["score"] = max(existing.get("score", 0), target.get("score", 0))
+
+    ordered = sorted(
+        deduped.values(),
+        key=lambda item: (
+            -item.get("score", 0),
+            0 if item.get("headline") else 1,
+            item["url"],
+        ),
+    )
+
+    if ordered:
+        _log(session_id, f"  ✓ Finalized {len(ordered)} front-page article links after deduping")
+
+    return [
+        {"url": item["url"], "headline": item.get("headline", "")}
+        for item in ordered
+    ]
+
+
 def _extract_embedded_article_rows(driver, session_id: str) -> list[list[str]]:
     try:
         embedded = _extract_embedded_article_data_from_html(driver.page_source)
@@ -696,6 +866,118 @@ def _page_has_extractable_content(driver) -> tuple[bool, int]:
     return False, len(body_text)
 
 
+def _get_main_content_container(driver, session_id: str):
+    url = driver.current_url
+    main_content_selectors = _get_site_specific_selectors(driver, url)
+
+    for selector in main_content_selectors:
+        try:
+            elements = driver.find_elements(By.CSS_SELECTOR, selector)
+            if elements:
+                _log(session_id, f"  ✓ Found content using selector: {selector[:50]}")
+                return elements[0]
+        except Exception:
+            continue
+
+    try:
+        return driver.find_element(By.TAG_NAME, "body")
+    except Exception:
+        return None
+
+
+def _should_expand_article_control(text: str) -> bool:
+    cleaned = normalize_text(text or "")
+    if not cleaned:
+        return False
+
+    lowered = cleaned.lower()
+    allowed_phrases = [
+        "read more", "read full", "continue reading", "show more", "load more",
+        "view more", "more", "full story", "full article", "open full story",
+        "next page", "next part", "continue", "continue to next page",
+        "पूरा पढ़ें", "और पढ़ें", "आगे पढ़ें", "पूरी खबर पढ़ें", "पूरी स्टोरी पढ़ें",
+        "अगला पेज", "अगले पेज", "अगला भाग", "अगला हिस्सा", "पूरा आर्टिकल पढ़ें",
+    ]
+    blocked_phrases = [
+        "share", "subscribe", "follow", "login", "sign in", "register",
+        "live tv", "watch live", "video", "photos", "gallery", "trending",
+        "related", "also read", "ये भी पढ़ें", "यह भी पढ़ें", "यह भी देखें",
+    ]
+
+    if any(phrase in lowered for phrase in blocked_phrases):
+        return False
+
+    return any(phrase in lowered for phrase in allowed_phrases)
+
+
+def _expand_inline_article_content(driver, session_id: str, max_clicks: int = 3) -> int:
+    expanded = 0
+    seen_targets = set()
+
+    for _ in range(max_clicks):
+        main_container = _get_main_content_container(driver, session_id)
+        if not main_container:
+            break
+
+        before_url = driver.current_url
+        before_text = _safe_body_text(driver)
+        before_len = len(before_text)
+        clicked = False
+
+        try:
+            controls = main_container.find_elements(
+                By.CSS_SELECTOR,
+                "a[href], button, [role='button'], [onclick]"
+            )
+        except Exception:
+            controls = []
+
+        for control in controls:
+            try:
+                if not control.is_displayed():
+                    continue
+
+                text = normalize_text(
+                    control.text
+                    or control.get_attribute("aria-label")
+                    or control.get_attribute("title")
+                    or ""
+                )
+                href = normalize_text(control.get_attribute("href") or "")
+                target_key = href or text
+                if not target_key or target_key in seen_targets:
+                    continue
+                if not _should_expand_article_control(text):
+                    continue
+
+                seen_targets.add(target_key)
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", control)
+                time.sleep(0.5)
+                driver.execute_script("arguments[0].click();", control)
+                time.sleep(1.5)
+
+                try:
+                    WebDriverWait(driver, 8).until(
+                        lambda d: d.current_url != before_url or len(_safe_body_text(d)) > before_len + 120
+                    )
+                except Exception:
+                    pass
+
+                after_len = len(_safe_body_text(driver))
+                if driver.current_url != before_url or after_len > before_len + 120:
+                    expanded += 1
+                    clicked = True
+                    _log(session_id, f"  ✓ Expanded article content via: {text[:80] or href[:80]}")
+                    break
+            except Exception:
+                continue
+
+        if not clicked:
+            break
+
+    return expanded
+
+
 def _extract_generic_content(driver, session_id: str) -> list[list[str]]:
     """
     Extracts ALL content from news/article pages in a hierarchical structure.
@@ -726,27 +1008,9 @@ def _extract_generic_content(driver, session_id: str) -> list[list[str]]:
     if metadata["category"]:
         all_data.append(["Category", metadata["category"], ""])
 
-    # Get site-specific selectors
-    url = driver.current_url
-    main_content_selectors = _get_site_specific_selectors(driver, url)
-    
-    main_container = None
-    for selector in main_content_selectors:
-        try:
-            elements = driver.find_elements(By.CSS_SELECTOR, selector)
-            if elements:
-                main_container = elements[0]
-                _log(session_id, f"  ✓ Found content using selector: {selector[:50]}")
-                break
-        except:
-            continue
-    
-    # If no main container found, use body
+    main_container = _get_main_content_container(driver, session_id)
     if not main_container:
-        try:
-            main_container = driver.find_element(By.TAG_NAME, 'body')
-        except:
-            return all_data
+        return all_data
 
     def is_excluded_element(element):
         """Check if element should be excluded (ads, sidebars, trending news, etc.)"""
@@ -1153,7 +1417,25 @@ def _is_article_url(url: str, base_domain: str) -> bool:
             # aajtak: /india/news/story/... or /short-videos/video/...
             if not any(x in path for x in ['/topic/', '/search', '/tag/']):
                 return True
-    
+
+    if any(domain in base_domain for domain in ('news18.com', 'cnnnews18.com', 'cnbctv18.com', 'firstpost.com')):
+        skip_sections = (
+            '/photos', '/videos', '/video', '/live-tv', '/live', '/web-stories',
+            '/shows', '/podcast', '/opinion', '/explainers', '/cricketnext',
+            '/showsha', '/city-news', '/auto', '/tech', '/astro', '/astrology',
+            '/games', '/air-quality', '/contact', '/about', '/privacy', '/sitemap'
+        )
+        if any(path.startswith(skip) for skip in skip_sections):
+            return False
+
+        segments = [s for s in path.split('/') if s]
+        if len(segments) >= 2:
+            last_segment = segments[-1]
+            if len(last_segment) > 12 and '-' in last_segment:
+                return True
+            if re.search(r'(news|story|live-updates|explained|review|result|score)', last_segment):
+                return True
+
     # NDTV specific patterns
     if 'ndtv' in base_domain:
         # NDTV-style: ends with -XXXXXXXX (8+ digit number)
@@ -1172,7 +1454,7 @@ def _is_article_url(url: str, base_domain: str) -> bool:
             if not any(x in path for x in ['/search', '/tag/', '/topic/']):
                 return True
 
-    if any(domain in base_domain for domain in ('cnn.com', 'bbc.com', 'reuters.com', 'thehindu.com', 'hindustantimes.com', 'indianexpress.com')):
+    if any(domain in base_domain for domain in ('cnn.com', 'bbc.com', 'reuters.com', 'thehindu.com', 'hindustantimes.com', 'indianexpress.com', 'news18.com', 'cnnnews18.com', 'cnbctv18.com', 'firstpost.com')):
         if re.search(r'/\d{4}/\d{2}/\d{2}/', path):
             return True
         if any(token in path for token in ('/story/', '/news/', '/article/', '/articles/', '/world/', '/india/', '/politics/', '/business/')):
@@ -1189,7 +1471,8 @@ def _is_article_url(url: str, base_domain: str) -> bool:
         '/opinion', '/offbeat', '/sports/', '/entertainment/',
         '/tech/', '/education/', '/lifestyle/', '/travel/', '/food/',
         '/privacy', '/terms', '/contact', '/about', '/newsletter',
-        '/weather', '/crossword', '/games', '/podcasts',
+        '/weather', '/crossword', '/games', '/podcasts', '/web-stories',
+        '/live-tv', '/videos/', '/photos/',
     ]
     
     for skip in skip_paths:
@@ -1232,6 +1515,11 @@ def run_generic_scraper(session_id: str, start_url: str, mode: str, stop_event: 
         4. Extracts the FULL article content (all paragraphs merged)
         5. Saves: Article URL → Heading → Full merged content → Links
         6. Moves to next article
+    Mode 'frontpage_news':
+        1. Opens the front page of a news site
+        2. Collects visible headline links from that page
+        3. Opens each headline/article
+        4. Extracts the full article content and metadata
     """
     driver = None
     records = 0
@@ -1242,11 +1530,13 @@ def run_generic_scraper(session_id: str, start_url: str, mode: str, stop_event: 
     is_datatable = False
 
     try:
+        mode = _normalize_generic_mode(mode)
         driver = _make_driver()
         base_domain = urlparse(start_url).netloc
 
-        if mode == "deep":
-            _log(session_id, f"Opening listing page to collect article links...")
+        if mode in {"deep", "frontpage_news"}:
+            opening_label = "front page" if mode == "frontpage_news" else "listing page"
+            _log(session_id, f"Opening {opening_label} to collect article links...")
             _set_status(session_id, "COLLECTING LINKS")
 
             try:
@@ -1261,22 +1551,31 @@ def run_generic_scraper(session_id: str, start_url: str, mode: str, stop_event: 
                 _set_status(session_id, "ERROR")
                 return
 
-            # Collect ONLY article links - filter out category/nav/listing pages
-            _log(session_id, "Filtering article links from page...")
-
-            queue.extend(_extract_candidate_links_from_page(driver, session_id, start_url))
+            if mode == "frontpage_news":
+                _log(session_id, "Collecting front-page headline links...")
+                queue.extend(_extract_frontpage_article_targets(driver, session_id, start_url))
+            else:
+                _log(session_id, "Filtering article links from page...")
+                queue.extend(
+                    {"url": link, "headline": ""}
+                    for link in _extract_candidate_links_from_page(driver, session_id, start_url)
+                )
             visited.add(_canonicalize_url(start_url))
             _log(session_id, f"✓ Found {len(queue)} article links to scrape")
 
         else:
-            queue.append(start_url)
+            queue.append({"url": start_url, "headline": ""})
 
         # ── Process each article ──────────────────────────────────────────────
         link_counter = 0
         total = len(queue)
 
         while queue and not stop_event.is_set():
-            url = queue.pop(0)
+            target = queue.pop(0)
+            if isinstance(target, str):
+                target = {"url": target, "headline": ""}
+            url = target.get("url", "")
+            source_headline = normalize_text(target.get("headline", ""))
             clean_url = _canonicalize_url(url)
             if clean_url in visited:
                 continue
@@ -1284,6 +1583,8 @@ def run_generic_scraper(session_id: str, start_url: str, mode: str, stop_event: 
             link_counter += 1
 
             _log(session_id, f"[{link_counter}/{total}] Opening: {url[:80]}")
+            if source_headline:
+                _log(session_id, f"  ↳ From headline: {source_headline[:120]}")
             _set_status(session_id, "RUNNING")
 
             try:
@@ -1304,6 +1605,13 @@ def run_generic_scraper(session_id: str, start_url: str, mode: str, stop_event: 
             except TimeoutException:
                 _log(session_id, "  ✗ Page body not found. Skipping.")
                 continue
+
+            try:
+                expansions = _expand_inline_article_content(driver, session_id)
+                if expansions:
+                    _wait_for_page_ready(driver, session_id, extra_wait=1.0)
+            except Exception as exc:
+                _log(session_id, f"  Inline expansion skipped: {exc}")
 
             # Check if page has actual text content or embedded article data
             try:
@@ -1347,6 +1655,14 @@ def run_generic_scraper(session_id: str, start_url: str, mode: str, stop_event: 
                 }
 
                 docs = [sep_doc]
+                if source_headline:
+                    docs.append({
+                        "session_id": session_id,
+                        "content_type": normalize_text("Front Page Headline"),
+                        "extracted_data": source_headline,
+                        "extra_info": normalize_text(clean_url or url)
+                    })
+                    records += 1
                 for row in rows:
                     docs.append({
                         "session_id": session_id,
@@ -1424,6 +1740,7 @@ def start_generic_session(url: str, mode: str = "single") -> tuple[str, str]:
     session_id = uuid.uuid4().hex[:8]
     stop_event = threading.Event()
 
+    mode = _normalize_generic_mode(mode)
     session = _make_session(session_id, url, mode)
     session["stop_event"] = stop_event   # store for stop API
 

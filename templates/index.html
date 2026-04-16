@@ -85,7 +85,7 @@
     <section class="section-label" style="margin-top:8px; display: flex; justify-content: space-between; align-items: center;">
         <div>
             <span class="section-tag tag-generic">Generic Scraper</span>
-            <span class="section-desc">Paste any URL — extracts all table data simultaneously</span>
+            <span class="section-desc">Paste any URL to scrape one page, crawl article links, or collect front-page news stories</span>
         </div>
         <button class="btn btn-danger btn-sm" onclick="flushAllGenericSessions()">🧹 Flush All Data</button>
     </section>
@@ -97,21 +97,21 @@
                 <input
                     type="url"
                     id="scrapeUrl"
-                    placeholder="https://example.com/data-page"
+                    placeholder="https://www.aajtak.in/"
                     autocomplete="off"
                 >
             </div>
             <div class="actions" style="display: flex; gap: 8px;">
-                <button class="btn btn-primary" onclick="addGenericScraper('single')" id="btn-g-single">
-                    📄 Scrape Single Page
+                <button class="btn btn-secondary" onclick="addGenericScraper('frontpage_news')" id="btn-g-news">
+                    📰 News Channel Scraping
                 </button>
-                <button class="btn btn-accent" onclick="addGenericScraper('deep')" id="btn-g-deep">
-                    🕸️ Scrape Every Link
+                <button class="btn btn-primary" onclick="addGenericScraper('single')" id="btn-g-single">
+                    📄 Normal Page Data Scraping
                 </button>
             </div>
         </div>
         <div id="generic-message" class="message hidden"></div>
-        <p class="hint">Max 5 simultaneous sessions. Extracts all <code>&lt;table&gt;</code> data found on the page. Supports DataTables pagination.</p>
+        <p class="hint">Max 5 simultaneous sessions. Use <strong>News Channel Scraping</strong> for sites like <code>aajtak.in</code>, and <strong>Normal Page Data Scraping</strong> for regular pages.</p>
     </section>
 
     <!-- Scraper cards stack -->
@@ -120,7 +120,7 @@
     </section>
 
     <p id="no-sessions-hint" class="no-sessions-hint" style="display:none;">
-        No scrapers added yet. Paste a URL above and click <strong>Add Scraper</strong>.
+        No scrapers added yet. Paste a URL above and start a scraper mode.
     </p>
 
 </main>

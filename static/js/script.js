@@ -147,9 +147,9 @@ async function addGenericScraper(mode) {
     if (!url) { setGenericMessage("Please enter a URL.", true); return; }
 
     const btn1 = document.getElementById("btn-g-single");
-    const btn2 = document.getElementById("btn-g-deep");
+    const btnNews = document.getElementById("btn-g-news");
     if(btn1) btn1.disabled = true;
-    if(btn2) btn2.disabled = true;
+    if(btnNews) btnNews.disabled = true;
 
     try {
         const res = await fetch("/api/generic/add", {
@@ -169,7 +169,7 @@ async function addGenericScraper(mode) {
         setGenericMessage("Could not reach /api/generic/add", true);
     } finally {
         if(btn1) btn1.disabled = false;
-        if(btn2) btn2.disabled = false;
+        if(btnNews) btnNews.disabled = false;
     }
 }
 
@@ -226,6 +226,11 @@ function buildCardHTML(sess) {
     const logs = Array.isArray(sess.logs) ? sess.logs.slice(-8).join("\n") : "";
     const isRunning = sess.is_running;
     const hasCsv = sess.records > 0;
+    const modeLabel = (() => {
+        if (sess.mode === "frontpage_news") return "📰 News Channel";
+        if (sess.mode === "deep") return "🕸️ Deep Crawl";
+        return "📄 Normal Page Data";
+    })();
 
     return `
         <section class="panel" style="border: 1px solid #334871;">
@@ -251,7 +256,7 @@ function buildCardHTML(sess) {
                 </div>
                 <div class="card">
                     <h3>Mode</h3>
-                    <p class="metric">${sess.mode === 'deep' ? '🕸️ Every Link' : '📄 Single Page'}</p>
+                    <p class="metric">${modeLabel}</p>
                 </div>
                 <div class="card">
                     <h3>Rows Saved</h3>
