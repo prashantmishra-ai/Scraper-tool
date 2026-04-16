@@ -250,6 +250,10 @@ function buildCardHTML(sess) {
                     <p class="metric status-${statusClass}">${sess.status}</p>
                 </div>
                 <div class="card">
+                    <h3>Mode</h3>
+                    <p class="metric">${sess.mode === 'deep' ? '🕸️ Every Link' : '📄 Single Page'}</p>
+                </div>
+                <div class="card">
                     <h3>Rows Saved</h3>
                     <p class="metric">${(sess.records || 0).toLocaleString()}</p>
                 </div>

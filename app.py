@@ -11,6 +11,7 @@ from isbn_scraper import (
     log_event,
 )
 from db import isbn_collection, generic_collection
+from text_utils import normalize_text
 
 # ── Generic scraper ────────────────────────────────────────────────────────────
 from generic_scraper import (
@@ -106,12 +107,12 @@ def download_data():
         writer = csv.writer(output)
         columns = ["#", "Book Title", "ISBN", "Product Form", "Language", "Applicant Type", "Name of Publishing Agency/Publisher", "Imprint", "Name of Author/Editor", "Publication Date"]
         writer.writerow(columns)
-        yield output.getvalue()
+        yield "\ufeff" + output.getvalue()
         output.seek(0)
         output.truncate(0)
         
         for doc in isbn_collection.find():
-            writer.writerow([doc.get(col, "") for col in columns])
+            writer.writerow([normalize_text(doc.get(col, "")) for col in columns])
             yield output.getvalue()
             output.seek(0)
             output.truncate(0)
@@ -119,7 +120,7 @@ def download_data():
     from flask import Response
     return Response(
         generate(), 
-        mimetype='text/csv', 
+        content_type='text/csv; charset=utf-8',
         headers={"Content-Disposition": "attachment; filename=isbn_full_data.csv"}
     )
 
@@ -191,12 +192,16 @@ def generic_download(session_id):
         output = StringIO()
         writer = csv.writer(output)
         writer.writerow(["Content Type", "Extracted Data", "Extra Info / Link"])
-        yield output.getvalue()
+        yield "\ufeff" + output.getvalue()
         output.seek(0)
         output.truncate(0)
         
         for doc in generic_collection.find({"session_id": session_id}):
-            writer.writerow([doc.get("content_type", ""), doc.get("extracted_data", ""), doc.get("extra_info", "")])
+            writer.writerow([
+                normalize_text(doc.get("content_type", "")),
+                normalize_text(doc.get("extracted_data", "")),
+                normalize_text(doc.get("extra_info", "")),
+            ])
             yield output.getvalue()
             output.seek(0)
             output.truncate(0)
@@ -204,7 +209,7 @@ def generic_download(session_id):
     from flask import Response
     return Response(
         generate_generic(), 
-        mimetype='text/csv', 
+        content_type='text/csv; charset=utf-8',
         headers={"Content-Disposition": f"attachment; filename=scraped_{domain}_{session_id}.csv"}
     )
 
