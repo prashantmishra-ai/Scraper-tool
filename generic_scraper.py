@@ -36,6 +36,22 @@ TRACKING_QUERY_KEYS = {
     "s", "ss", "sr_share", "ncid", "taid", "output"
 }
 
+FRONTPAGE_PRIORITY_KEYWORDS = (
+    "latest", "latest news", "trending", "top headlines", "top stories",
+    "breaking", "breaking news", "recent", "must read", "recommended",
+    "live updates", "news updates", "top news", "big stories",
+    "headlines", "spotlight", "editor's picks", "top picks",
+    "आज की ताजा खबर", "ताजा खबर", "ट्रेंडिंग", "ब्रेकिंग", "मुख्य खबरें",
+    "आज की बड़ी खबरें", "लेटेस्ट", "लेटेस्ट न्यूज़",
+)
+
+GOOGLE_NEWS_SECTION_LABELS = {
+    "your briefing", "top stories", "local news", "picks for you", "for you",
+    "your topics", "india", "world", "business", "technology", "science",
+    "health", "sports", "entertainment", "politics", "tv", "social sciences",
+    "celebrities", "google weather", "weather",
+}
+
 
 def _make_session(session_id: str, url: str, mode: str = "single") -> dict:
     return {
@@ -124,11 +140,247 @@ def _canonicalize_url(url: str) -> str:
     return normalized.rstrip("/") if normalized.endswith("/") and cleaned.path not in {"", "/"} else normalized
 
 
+def _is_google_news_url(url: str) -> bool:
+    from urllib.parse import urlparse
+
+    try:
+        domain = urlparse(url or "").netloc.lower()
+    except Exception:
+        return False
+    return domain.startswith("news.google.")
+
+
 def _safe_body_text(driver) -> str:
     try:
         return driver.find_element(By.TAG_NAME, "body").text.strip()
     except Exception:
         return ""
+
+
+def _looks_like_google_news_time(line: str) -> bool:
+    cleaned = normalize_text(line or "")
+    if not cleaned:
+        return False
+
+    if re.search(r"\b\d+\s+(minutes?|mins?|hours?|days?)\s+ago\b", cleaned, re.IGNORECASE):
+        return True
+    if cleaned.lower() in {"yesterday", "today", "just now"}:
+        return True
+    return False
+
+
+def _looks_like_google_news_section(line: str) -> bool:
+    cleaned = normalize_text(line or "")
+    if not cleaned:
+        return False
+
+    lowered = cleaned.lower()
+    if lowered in GOOGLE_NEWS_SECTION_LABELS:
+        return True
+    if lowered.endswith(" chevron_right"):
+        return True
+    return False
+
+
+def _looks_like_google_news_source(line: str) -> bool:
+    cleaned = normalize_text(line or "")
+    if not cleaned:
+        return False
+    if _looks_like_google_news_section(cleaned) or _looks_like_google_news_time(cleaned):
+        return False
+    if cleaned.startswith("By "):
+        return False
+    if "°" in cleaned:
+        return False
+    if len(cleaned) > 80:
+        return False
+
+    words = cleaned.split()
+    if not (1 <= len(words) <= 8):
+        return False
+
+    bad_tokens = {"see", "more", "help_outline", "today", "sat", "sun", "mon", "tue", "wed", "thu", "fri"}
+    if any(word.lower() in bad_tokens for word in words):
+        return False
+
+    return True
+
+
+def _looks_like_google_news_headline(line: str) -> bool:
+    cleaned = normalize_text(line or "")
+    if not cleaned:
+        return False
+    if _looks_like_google_news_section(cleaned) or _looks_like_google_news_time(cleaned):
+        return False
+    if cleaned.startswith("By "):
+        return False
+    if "°" in cleaned:
+        return False
+    if len(cleaned.split()) < 4:
+        return False
+    return len(cleaned) >= 20
+
+
+def _parse_google_news_text(raw_text: str) -> list[list[str]]:
+    if not isinstance(raw_text, str) or not raw_text.strip():
+        return []
+
+    rows = []
+    lines = [
+        normalize_text(line)
+        for line in raw_text.splitlines()
+        if normalize_text(line)
+    ]
+
+    current_section = ""
+    current_cluster = ""
+    i = 0
+
+    while i < len(lines):
+        line = lines[i]
+        lowered = line.lower()
+
+        if lowered in {"help_outline", "see more", "see more headlines and perspectives"}:
+            i += 1
+            continue
+
+        if lowered.endswith(" chevron_right"):
+            current_cluster = line.rsplit(" chevron_right", 1)[0].strip()
+            if current_cluster:
+                rows.append(["Google News Cluster", current_cluster, current_section])
+            i += 1
+            continue
+
+        if _looks_like_google_news_section(line):
+            current_section = line
+            current_cluster = ""
+            rows.append(["Section", line, ""])
+            i += 1
+            continue
+
+        if (
+            i + 1 < len(lines)
+            and _looks_like_google_news_source(line)
+            and _looks_like_google_news_headline(lines[i + 1])
+        ):
+            source = line
+            headline = lines[i + 1]
+            meta_lines = []
+            j = i + 2
+
+            while j < len(lines):
+                candidate = lines[j]
+                if _looks_like_google_news_section(candidate) or candidate.lower().endswith(" chevron_right"):
+                    break
+                if (
+                    _looks_like_google_news_source(candidate)
+                    and j + 1 < len(lines)
+                    and _looks_like_google_news_headline(lines[j + 1])
+                ):
+                    break
+                if _looks_like_google_news_time(candidate) or candidate.startswith("By "):
+                    meta_lines.append(candidate)
+                    j += 1
+                    continue
+                if len(meta_lines) >= 2:
+                    break
+                # Short trailing fragments like author names sometimes appear alone.
+                if len(candidate) <= 60:
+                    meta_lines.append(candidate)
+                    j += 1
+                    continue
+                break
+
+            extra_parts = [part for part in (current_section, current_cluster, source) if part]
+            rows.append(["Google News Story", headline, " | ".join(extra_parts)])
+            if meta_lines:
+                rows.append(["Google News Story Meta", " | ".join(meta_lines), headline])
+            i = j
+            continue
+
+        if current_section in {"Your briefing", "Google Weather"} or not rows:
+            rows.append(["Google News Feed Line", line, current_section])
+
+        i += 1
+
+    return rows
+
+
+def _is_google_owned_domain(domain: str) -> bool:
+    host = (domain or "").lower()
+    return host.startswith("news.google.") or host.endswith(".google.com") or host == "google.com"
+
+
+def _is_google_news_story_url(url: str) -> bool:
+    from urllib.parse import urlparse
+
+    try:
+        parsed = urlparse(url or "")
+    except Exception:
+        return False
+
+    if not _is_google_news_url(url):
+        return False
+
+    path = (parsed.path or "").lower()
+    return any(token in path for token in ("/read/", "/articles/", "/rss/articles/", "/topics/"))
+
+
+def _looks_like_external_article_candidate(url: str) -> bool:
+    from urllib.parse import urlparse
+
+    canonical = _canonicalize_url(url)
+    if not canonical:
+        return False
+
+    parsed = urlparse(canonical)
+    if _is_google_owned_domain(parsed.netloc):
+        return False
+
+    path = (parsed.path or "").rstrip("/")
+    if len(path) <= 10:
+        return False
+    if path in {"", "/"}:
+        return False
+    if any(path.startswith(prefix) for prefix in ("/search", "/topic", "/topics", "/tag", "/author", "/authors")):
+        return False
+    return True
+
+
+def _pick_google_news_story_href(hrefs: list[str], prefer_external: bool = False) -> str:
+    from urllib.parse import urlparse
+
+    best_url = ""
+    best_score = -1
+
+    for href in hrefs:
+        canonical = _canonicalize_url(href)
+        if not canonical:
+            continue
+
+        parsed = urlparse(canonical)
+        domain = parsed.netloc.lower()
+        path = (parsed.path or "").lower()
+
+        score = -1
+        if _looks_like_external_article_candidate(canonical):
+            score = 8
+            if len(path) > 20:
+                score += 1
+            if "-" in path:
+                score += 1
+        elif not prefer_external and _is_google_news_story_url(canonical):
+            score = 6
+        elif not prefer_external and _is_google_news_url(canonical):
+            score = 2
+        elif not prefer_external and not _is_google_owned_domain(domain):
+            score = 1
+
+        if score > best_score:
+            best_url = canonical
+            best_score = score
+
+    return best_url
 
 
 def _make_driver():
@@ -448,7 +700,20 @@ def _get_site_specific_selectors(driver, url: str) -> list:
             'article',
             'main',
         ] + base_selectors
-    
+
+    elif 'abplive' in domain:
+        # ABP Live specific selectors
+        return [
+            '[class*="article"]',
+            '[class*="story"]',
+            '[class*="detail"]',
+            '[class*="news-detail"]',
+            '[class*="newsDetail"]',
+            '[class*="content"]',
+            'article',
+            'main',
+        ] + base_selectors
+
     elif 'timesofindia' in domain or 'indiatimes' in domain:
         # Times of India (timesofindia.indiatimes.com) specific selectors
         return [
@@ -682,6 +947,49 @@ def _looks_like_headline(text: str) -> bool:
     return True
 
 
+def _frontpage_section_priority(label: str) -> int:
+    cleaned = normalize_text(label or "")
+    if not cleaned:
+        return 0
+
+    lowered = cleaned.lower()
+    score = 0
+    for keyword in FRONTPAGE_PRIORITY_KEYWORDS:
+        if keyword.lower() in lowered:
+            if keyword.lower() in {"trending", "breaking", "latest", "top headlines", "top stories"}:
+                score += 3
+            else:
+                score += 2
+    return score
+
+
+def _extract_anchor_headline(anchor) -> str:
+    try:
+        text = normalize_text(
+            anchor.text
+            or anchor.get_attribute("title")
+            or anchor.get_attribute("aria-label")
+            or anchor.get_attribute("data-title")
+            or anchor.get_attribute("innerText")
+            or anchor.get_attribute("textContent")
+            or ""
+        )
+        if text:
+            return text
+    except Exception:
+        pass
+
+    try:
+        for image in anchor.find_elements(By.TAG_NAME, "img"):
+            alt_text = normalize_text(image.get_attribute("alt") or image.get_attribute("title") or "")
+            if alt_text:
+                return alt_text
+    except Exception:
+        pass
+
+    return ""
+
+
 def _scroll_frontpage_for_links(driver, session_id: str, max_steps: int = 8):
     last_height = 0
     stable_steps = 0
@@ -741,7 +1049,7 @@ def _collect_frontpage_visible_targets(driver, session_id: str, start_url: str, 
         for anchor in anchors:
             try:
                 href = anchor.get_attribute("href")
-                text = normalize_text(anchor.text or anchor.get_attribute("title") or anchor.get_attribute("aria-label") or "")
+                text = _extract_anchor_headline(anchor)
                 if not href:
                     continue
                 if text and not _looks_like_headline(text):
@@ -755,51 +1063,139 @@ def _collect_frontpage_visible_targets(driver, session_id: str, start_url: str, 
         _log(session_id, f"  ✓ Collected {collected} visible front-page article candidates")
 
 
+def _collect_frontpage_priority_section_targets(driver, session_id: str, start_url: str, add_target):
+    from urllib.parse import urljoin
+
+    container_selectors = [
+        "[class*='latest']",
+        "[id*='latest']",
+        "[class*='trending']",
+        "[id*='trending']",
+        "[class*='breaking']",
+        "[id*='breaking']",
+        "[class*='headline']",
+        "[id*='headline']",
+        "[class*='top-story']",
+        "[class*='top-stories']",
+        "[class*='topnews']",
+        "[class*='top-news']",
+        "[class*='recent']",
+        "[id*='recent']",
+    ]
+
+    matched_sections = 0
+    collected = 0
+    seen_sections = set()
+
+    for selector in container_selectors:
+        try:
+            containers = driver.find_elements(By.CSS_SELECTOR, selector)
+        except Exception:
+            continue
+
+        for container in containers:
+            try:
+                section_key = container.id
+            except Exception:
+                section_key = None
+
+            try:
+                label = normalize_text(driver.execute_script(
+                    """
+                    const node = arguments[0];
+                    const heading = node.querySelector('h1, h2, h3, h4, strong, [class*="heading"], [class*="title"]');
+                    return (
+                        (heading && heading.innerText) ||
+                        node.getAttribute('aria-label') ||
+                        node.getAttribute('title') ||
+                        node.getAttribute('id') ||
+                        node.getAttribute('class') ||
+                        ''
+                    ).trim();
+                    """,
+                    container,
+                ))
+            except Exception:
+                label = normalize_text(
+                    container.get_attribute("aria-label")
+                    or container.get_attribute("title")
+                    or container.get_attribute("id")
+                    or container.get_attribute("class")
+                    or ""
+                )
+
+            priority = _frontpage_section_priority(label)
+            if priority <= 0:
+                continue
+
+            section_key = section_key or f"{selector}|{label}"
+            if section_key in seen_sections:
+                continue
+            seen_sections.add(section_key)
+            matched_sections += 1
+
+            try:
+                anchors = container.find_elements(By.CSS_SELECTOR, "a[href]")
+            except Exception:
+                anchors = []
+
+            for anchor in anchors:
+                try:
+                    href = anchor.get_attribute("href")
+                    text = _extract_anchor_headline(anchor)
+                    if not href:
+                        continue
+                    if text and not _looks_like_headline(text):
+                        continue
+                    if add_target(urljoin(start_url, href), text, source=f"priority:{label}", score_bonus=priority):
+                        collected += 1
+                except Exception:
+                    continue
+
+    if matched_sections:
+        _log(
+            session_id,
+            f"  ✓ Prioritized {matched_sections} latest/trending/front-page sections and collected {collected} candidate links",
+        )
+
+
 def _extract_frontpage_article_targets(driver, session_id: str, start_url: str) -> list[dict]:
-    from urllib.parse import urljoin, urlparse
+    from urllib.parse import urlparse
 
     base_domain = urlparse(start_url).netloc.lower()
-    targets = []
-    seen = set()
-    score_by_url = {}
+    targets_by_url = {}
 
-    def add_target(url: str, headline: str = "", source: str = "fallback"):
+    def add_target(url: str, headline: str = "", source: str = "fallback", score_bonus: int = 0):
         canonical = _canonicalize_url(url)
         headline_text = normalize_text(headline or "")
-        if not canonical or canonical in seen:
+        if not canonical:
             return False
         if not _is_article_url(canonical, base_domain):
             return False
+        score = 1
         if source == "visible":
-            score_by_url[canonical] = score_by_url.get(canonical, 0) + 2
-        else:
-            score_by_url[canonical] = score_by_url.get(canonical, 0) + 1
-        seen.add(canonical)
-        targets.append({
-            "url": canonical,
-            "headline": headline_text,
-            "score": score_by_url[canonical],
-        })
+            score = 2
+        elif source.startswith("priority:"):
+            score = 4
+
+        target = targets_by_url.setdefault(
+            canonical,
+            {"url": canonical, "headline": "", "score": 0},
+        )
+        if headline_text and len(headline_text) > len(target.get("headline", "")):
+            target["headline"] = headline_text
+        target["score"] += score + max(0, score_bonus)
         return True
 
     _scroll_frontpage_for_links(driver, session_id)
+    _collect_frontpage_priority_section_targets(driver, session_id, start_url, add_target)
     _collect_frontpage_visible_targets(driver, session_id, start_url, add_target)
 
     for candidate in _extract_candidate_links_from_page(driver, session_id, start_url):
         add_target(candidate, "", source="fallback")
 
-    deduped = {}
-    for target in targets:
-        existing = deduped.get(target["url"])
-        if not existing:
-            deduped[target["url"]] = dict(target)
-            continue
-        if target.get("headline") and not existing.get("headline"):
-            existing["headline"] = target["headline"]
-        existing["score"] = max(existing.get("score", 0), target.get("score", 0))
-
     ordered = sorted(
-        deduped.values(),
+        targets_by_url.values(),
         key=lambda item: (
             -item.get("score", 0),
             0 if item.get("headline") else 1,
@@ -842,6 +1238,169 @@ def _extract_embedded_article_rows(driver, session_id: str) -> list[list[str]]:
     if rows:
         _log(session_id, f"  ✓ Recovered {len(rows)} rows from embedded article data")
     return rows
+
+
+def _extract_google_news_frontpage_rows(driver, session_id: str) -> list[list[str]]:
+    rows = []
+
+    try:
+        main_text = driver.execute_script(
+            """
+            const main = document.querySelector('main');
+            const container = main || document.body;
+            return (container && (container.innerText || container.textContent)) || '';
+            """
+        )
+    except Exception:
+        main_text = _safe_body_text(driver)
+
+    parsed_rows = _parse_google_news_text(main_text or "")
+    rows.extend(parsed_rows)
+
+    try:
+        cards = driver.execute_script(
+            """
+            const main = document.querySelector('main') || document.body;
+            const articles = Array.from(main.querySelectorAll('article'));
+            return articles.slice(0, 200).map((article) => {
+                const heading = article.querySelector('h1, h2, h3, h4, a[aria-label]');
+                const link = article.querySelector('a[href]');
+                return {
+                    headline: (heading && (heading.innerText || heading.getAttribute('aria-label'))) || '',
+                    text: (article.innerText || '').trim(),
+                    url: link ? link.href : '',
+                };
+            }).filter((item) => item.text);
+            """
+        )
+    except Exception:
+        cards = []
+
+    seen_card_texts = set()
+    for card in cards or []:
+        card_text = normalize_text(card.get("text", ""))
+        if not card_text or card_text in seen_card_texts:
+            continue
+        seen_card_texts.add(card_text)
+
+        headline = normalize_text(card.get("headline", "")) or card_text.split("\n", 1)[0]
+        card_url = normalize_text(card.get("url", ""))
+        rows.append(["Google News Card", headline, card_url])
+        if card_text != headline:
+            rows.append(["Google News Card Detail", card_text, card_url])
+
+    if len(rows) < 10 and main_text:
+        rows.append(["Google News Feed Snapshot", normalize_text(main_text), driver.current_url])
+
+    if rows:
+        _log(session_id, f"  ✓ Extracted {len(rows)} Google News front-page rows")
+    return rows
+
+
+def _extract_google_news_story_targets(driver, session_id: str, start_url: str) -> list[dict]:
+    targets_by_url = {}
+
+    _scroll_frontpage_for_links(driver, session_id, max_steps=10)
+
+    try:
+        cards = driver.execute_script(
+            """
+            const root = document.querySelector('main') || document.body;
+            return Array.from(root.querySelectorAll('article')).slice(0, 250).map((article) => {
+                const heading = article.querySelector('h1, h2, h3, h4, a[aria-label]');
+                const anchors = Array.from(article.querySelectorAll('a[href]')).map((a) => a.href);
+                return {
+                    headline: (heading && (heading.innerText || heading.getAttribute('aria-label'))) || '',
+                    text: (article.innerText || '').trim(),
+                    hrefs: anchors,
+                };
+            });
+            """
+        )
+    except Exception:
+        cards = []
+
+    for card in cards or []:
+        headline = normalize_text(card.get("headline", ""))
+        if not headline:
+            text = normalize_text(card.get("text", ""))
+            for line in text.splitlines():
+                line = normalize_text(line)
+                if _looks_like_google_news_headline(line):
+                    headline = line
+                    break
+
+        href = _pick_google_news_story_href(card.get("hrefs", []), prefer_external=False)
+        if not href or not headline:
+            continue
+
+        existing = targets_by_url.setdefault(
+            href,
+            {"url": href, "headline": "", "score": 0},
+        )
+        if len(headline) > len(existing.get("headline", "")):
+            existing["headline"] = headline
+        existing["score"] += 3
+
+    try:
+        anchors = driver.find_elements(By.CSS_SELECTOR, "main a[href], article a[href]")
+    except Exception:
+        anchors = []
+
+    for anchor in anchors:
+        try:
+            href = _canonicalize_url(anchor.get_attribute("href") or "")
+            headline = _extract_anchor_headline(anchor)
+            if not href or not headline or not _looks_like_google_news_headline(headline):
+                continue
+
+            existing = targets_by_url.setdefault(
+                href,
+                {"url": href, "headline": "", "score": 0},
+            )
+            if len(headline) > len(existing.get("headline", "")):
+                existing["headline"] = headline
+            existing["score"] += 1
+        except Exception:
+            continue
+
+    ordered = sorted(
+        targets_by_url.values(),
+        key=lambda item: (-item.get("score", 0), 0 if item.get("headline") else 1, item["url"]),
+    )
+
+    if ordered:
+        _log(session_id, f"  ✓ Collected {len(ordered)} Google News story targets")
+
+    return [{"url": item["url"], "headline": item.get("headline", "")} for item in ordered]
+
+
+def _follow_google_news_to_publisher(driver, session_id: str) -> bool:
+    if not _is_google_news_url(driver.current_url):
+        return False
+
+    try:
+        hrefs = driver.execute_script(
+            """
+            const root = document.querySelector('main') || document.body;
+            return Array.from(root.querySelectorAll('a[href]')).map((a) => a.href);
+            """
+        )
+    except Exception:
+        hrefs = []
+
+    publisher_url = _pick_google_news_story_href(hrefs, prefer_external=True)
+    if not publisher_url or _is_google_news_url(publisher_url):
+        return False
+
+    try:
+        _log(session_id, f"  ↳ Following publisher link: {publisher_url[:120]}")
+        driver.get(publisher_url)
+        _wait_for_page_ready(driver, session_id, extra_wait=1.5)
+        return True
+    except Exception as exc:
+        _log(session_id, f"  ⚠ Could not open publisher link from Google News: {exc}")
+        return False
 
 
 def _page_has_extractable_content(driver) -> tuple[bool, int]:
@@ -1031,7 +1590,7 @@ def _extract_generic_content(driver, session_id: str) -> list[list[str]]:
                 'comment', 'navigation', 'menu', 'breadcrumb', 'footer',
                 'header', 'sponsored', 'outbrain', 'taboola', 'recommend',
                 'marquee', 'ticker', 'marquee-item', 'live-blog',
-                'breaking', 'latest', 'story-list', 'article-list',
+                'story-list', 'article-list',
                 'news-list', 'video-list', 'photo-gallery', 'gallery',
                 'embed', 'twitter', 'facebook', 'instagram', 'youtube'
             ]
@@ -1054,8 +1613,9 @@ def _extract_generic_content(driver, session_id: str) -> list[list[str]]:
                 'more from'
             ]
             
+            compact_word_count = len((text_content or "").split())
             for indicator in trending_indicators:
-                if indicator.lower() in text_content:
+                if indicator.lower() in text_content and compact_word_count <= 40:
                     return True
             
             return False
@@ -1315,18 +1875,12 @@ def _extract_generic_content(driver, session_id: str) -> list[list[str]]:
     except Exception as e:
         pass
 
-    has_story_rows = any(row[0] in {"Article Content", "Paragraph", "Content Block"} for row in all_data)
-    if has_story_rows:
-        return all_data
-
     fallback_rows = _extract_embedded_article_rows(driver, session_id)
-    if not fallback_rows:
-        return all_data
-
-    existing_pairs = {(row[0], row[1]) for row in all_data}
-    for row in fallback_rows:
-        if (row[0], row[1]) not in existing_pairs:
-            all_data.append(row)
+    if fallback_rows:
+        existing_pairs = {(row[0], row[1]) for row in all_data}
+        for row in fallback_rows:
+            if (row[0], row[1]) not in existing_pairs:
+                all_data.append(row)
 
     return all_data
 
@@ -1436,17 +1990,34 @@ def _is_article_url(url: str, base_domain: str) -> bool:
             if re.search(r'(news|story|live-updates|explained|review|result|score)', last_segment):
                 return True
 
+    if 'abplive.com' in base_domain:
+        skip_sections = (
+            '/photos', '/videos', '/video', '/live-tv', '/live', '/short-videos',
+            '/web-stories', '/photo-gallery', '/topic', '/topics',
+            '/search', '/tag', '/author', '/contact', '/about', '/privacy', '/sitemap'
+        )
+        if any(path.startswith(skip) for skip in skip_sections):
+            return False
+
+        segments = [s for s in path.split('/') if s]
+        if len(segments) >= 3:
+            last_segment = segments[-1]
+            if re.search(r'-(\d{5,}|live-updates)$', last_segment):
+                return True
+            if len(last_segment) > 18 and '-' in last_segment and any(
+                token in path.lower() for token in ('/news/', '/live-updates/', '/trending/', '/videos/news/')
+            ):
+                return True
+
     # NDTV specific patterns
     if 'ndtv' in base_domain:
         # NDTV-style: ends with -XXXXXXXX (8+ digit number)
-        import re
         if re.search(r'-\d{6,}$', path):
             return True
     
     # New York Times specific patterns
     if 'nytimes' in base_domain:
         # NYT: /YYYY/MM/DD/section/slug.html
-        import re
         if re.match(r'/\d{4}/\d{2}/\d{2}/[a-z-]+/.+\.html', path):
             return True
         # Or articles with /article/ path
@@ -1485,7 +2056,6 @@ def _is_article_url(url: str, base_domain: str) -> bool:
     
     # Skip paths that are just section names (no article slug)
     # Article URLs typically end with a numeric ID
-    import re
     # NDTV-style: ends with -XXXXXXXX (8+ digit number)
     if re.search(r'-\d{6,}$', path):
         return True
@@ -1528,6 +2098,7 @@ def run_generic_scraper(session_id: str, start_url: str, mode: str, stop_event: 
     queue = []
     visited = set()
     is_datatable = False
+    google_frontpage_rows = []
 
     try:
         mode = _normalize_generic_mode(mode)
@@ -1552,8 +2123,13 @@ def run_generic_scraper(session_id: str, start_url: str, mode: str, stop_event: 
                 return
 
             if mode == "frontpage_news":
-                _log(session_id, "Collecting front-page headline links...")
-                queue.extend(_extract_frontpage_article_targets(driver, session_id, start_url))
+                if _is_google_news_url(start_url):
+                    _log(session_id, "Google News detected. Saving the feed and collecting story links...")
+                    google_frontpage_rows = _extract_google_news_frontpage_rows(driver, session_id)
+                    queue.extend(_extract_google_news_story_targets(driver, session_id, start_url))
+                else:
+                    _log(session_id, "Collecting front-page headline links...")
+                    queue.extend(_extract_frontpage_article_targets(driver, session_id, start_url))
             else:
                 _log(session_id, "Filtering article links from page...")
                 queue.extend(
@@ -1565,6 +2141,39 @@ def run_generic_scraper(session_id: str, start_url: str, mode: str, stop_event: 
 
         else:
             queue.append({"url": start_url, "headline": ""})
+
+        if google_frontpage_rows and not stop_event.is_set():
+            clean_url = _canonicalize_url(start_url)
+            docs = [{
+                "session_id": session_id,
+                "content_type": normalize_text("━━━ GOOGLE NEWS FRONT PAGE ━━━"),
+                "extracted_data": normalize_text(clean_url or start_url),
+                "extra_info": normalize_text("Google News Feed Snapshot")
+            }]
+
+            for row in google_frontpage_rows:
+                docs.append({
+                    "session_id": session_id,
+                    "content_type": normalize_text(row[0]),
+                    "extracted_data": normalize_text(row[1]),
+                    "extra_info": normalize_text(row[2]),
+                })
+                records += 1
+
+            try:
+                from db import is_db_connected
+                if is_db_connected():
+                    generic_collection.insert_many(docs)
+                else:
+                    _save_to_csv_fallback(session_id, docs)
+            except Exception as db_err:
+                _log(session_id, f"  DB error: {db_err}. Using CSV fallback.")
+                _save_to_csv_fallback(session_id, docs)
+
+            with _sessions_lock:
+                generic_sessions[session_id]["records"] = records
+
+            _log(session_id, f"  ✓ Saved Google News front-page snapshot ({len(google_frontpage_rows)} rows)")
 
         # ── Process each article ──────────────────────────────────────────────
         link_counter = 0
@@ -1605,6 +2214,9 @@ def run_generic_scraper(session_id: str, start_url: str, mode: str, stop_event: 
             except TimeoutException:
                 _log(session_id, "  ✗ Page body not found. Skipping.")
                 continue
+
+            if _is_google_news_url(driver.current_url):
+                _follow_google_news_to_publisher(driver, session_id)
 
             try:
                 expansions = _expand_inline_article_content(driver, session_id)
