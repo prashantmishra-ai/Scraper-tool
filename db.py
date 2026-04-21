@@ -6,7 +6,7 @@ import sys
 # Using the provided connection string via environment variable or default fallback
 MONGO_URI = os.environ.get(
     "MONGO_URI",
-    "mongodb://root:QWZzvaRfhaQgAvFYosm08bKrusELUBeN67zlQ3XR43R27aLbhqYBLZPAa2eIF5PN@ncrjyq53geq1emx68n14cuyd:27017/?directConnection=true"
+    "mongodb://localhost:27017/"
 )
 
 client = None
@@ -56,6 +56,7 @@ except Exception as e:
 db = client['scraper_db']
 isbn_collection = db['isbn_data']
 generic_collection = db['generic_data']
+news_articles_collection = db['news_articles']
 
 def is_db_connected():
     """Check if database is actually connected"""

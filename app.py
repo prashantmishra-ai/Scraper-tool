@@ -10,7 +10,7 @@ from isbn_scraper import (
     load_checkpoint,
     log_event,
 )
-from db import isbn_collection, generic_collection
+from db import isbn_collection, generic_collection, news_articles_collection
 from text_utils import normalize_text
 
 # ── Generic scraper ────────────────────────────────────────────────────────────
@@ -22,6 +22,20 @@ from generic_scraper import (
     get_sessions_snapshot,
     generic_sessions,
     _normalize_generic_mode,
+)
+
+# ── News scraper ──────────────────────────────────────────────────────────────
+from news_scraper import (
+    start_news_scraper,
+    stop_news_scraper,
+    get_news_scraper_status,
+    get_all_articles,
+    get_articles_by_topic,
+    get_articles_by_source,
+    search_articles,
+    get_article_count,
+    get_topics,
+    get_sources,
 )
 
 app = Flask(__name__)
@@ -212,6 +226,180 @@ def generic_download(session_id):
         generate_generic(), 
         content_type='text/csv; charset=utf-8',
         headers={"Content-Disposition": f"attachment; filename=scraped_{domain}_{session_id}.csv"}
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  News Scraper routes
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route('/api/news/start', methods=['POST'])
+def start_news_scraping():
+    """Start the news scraper"""
+    data = request.json or {}
+    sources = data.get('sources')  # Optional: list of specific sources to scrape
+    
+    success, message = start_news_scraper(sources)
+    if success:
+        return jsonify({"status": "success", "message": message})
+    else:
+        return jsonify({"status": "error", "message": message}), 400
+
+
+@app.route('/api/news/stop', methods=['POST'])
+def stop_news_scraping():
+    """Stop the news scraper"""
+    success, message = stop_news_scraper()
+    if success:
+        return jsonify({"status": "success", "message": message})
+    else:
+        return jsonify({"status": "error", "message": message}), 400
+
+
+@app.route('/api/news/status', methods=['GET'])
+def get_news_status():
+    """Get the current status of the news scraper"""
+    status = get_news_scraper_status()
+    total_count = get_article_count()
+    status['total_articles_in_db'] = total_count
+    return jsonify(status)
+
+
+@app.route('/api/news/articles', methods=['GET'])
+def list_news_articles():
+    """Get all news articles with optional pagination"""
+    limit = request.args.get('limit', default=100, type=int)
+    topic = request.args.get('topic')
+    source = request.args.get('source')
+    search = request.args.get('search')
+    
+    if search:
+        articles = search_articles(search, limit)
+    elif topic:
+        articles = get_articles_by_topic(topic, limit)
+    elif source:
+        articles = get_articles_by_source(source, limit)
+    else:
+        articles = get_all_articles(limit=limit)
+    
+    return jsonify({
+        "status": "success",
+        "count": len(articles),
+        "articles": articles
+    })
+
+
+@app.route('/api/news/articles/<article_id>', methods=['GET'])
+def get_news_article(article_id):
+    """Get a specific article by ID - STRICT SCHEMA ONLY"""
+    try:
+        from bson.objectid import ObjectId
+        article = news_articles_collection.find_one({"_id": ObjectId(article_id)})
+        if article:
+            # Remove _id and keep only the 10 schema fields
+            if "_id" in article:
+                del article["_id"]
+            
+            ALLOWED_FIELDS = {
+                "title", "description", "content", "url", "urlToImage",
+                "source", "author", "topic", "publishedAt", "fetchedAt"
+            }
+            cleaned = {k: v for k, v in article.items() if k in ALLOWED_FIELDS}
+            
+            if "title" in cleaned and "url" in cleaned and "topic" in cleaned:
+                return jsonify({"status": "success", "article": cleaned})
+            else:
+                return jsonify({"status": "error", "message": "Invalid article format"}), 400
+        else:
+            return jsonify({"status": "error", "message": "Article not found"}), 404
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Invalid article ID: {str(e)}"}), 400
+
+
+@app.route('/api/news/topics', methods=['GET'])
+def get_news_topics():
+    """Get all unique topics"""
+    topics = get_topics()
+    return jsonify({
+        "status": "success",
+        "topics": topics,
+        "count": len(topics)
+    })
+
+
+@app.route('/api/news/sources', methods=['GET'])
+def get_news_sources():
+    """Get all unique sources"""
+    sources = get_sources()
+    return jsonify({
+        "status": "success",
+        "sources": sources,
+        "count": len(sources)
+    })
+
+
+@app.route('/api/news/count', methods=['GET'])
+def get_news_count():
+    """Get article count with optional filters"""
+    topic = request.args.get('topic')
+    source = request.args.get('source')
+    
+    filters = {}
+    if topic:
+        filters['topic'] = topic
+    if source:
+        filters['source'] = source
+    
+    count = get_article_count(filters)
+    return jsonify({
+        "status": "success",
+        "count": count,
+        "filters": filters
+    })
+
+
+@app.route('/api/news/download', methods=['GET'])
+def download_news_articles():
+    """Download all articles as CSV"""
+    total = get_article_count()
+    if total == 0:
+        return jsonify({"status": "error", "message": "No articles available yet"}), 404
+    
+    def generate():
+        import csv
+        from io import StringIO
+        output = StringIO()
+        writer = csv.writer(output)
+        
+        # Header with all fields
+        headers = ["Title", "URL", "Topic", "Source", "Description", "Author", "Published At", "Fetched At", "Image URL"]
+        writer.writerow(headers)
+        yield "\ufeff" + output.getvalue()
+        output.seek(0)
+        output.truncate(0)
+        
+        # Write articles
+        for article in get_all_articles(limit=10000):  # Large limit for download
+            writer.writerow([
+                article.get("title", ""),
+                article.get("url", ""),
+                article.get("topic", ""),
+                article.get("source", ""),
+                article.get("description", ""),
+                article.get("author", ""),
+                article.get("publishedAt", ""),
+                article.get("fetchedAt", ""),
+                article.get("urlToImage", ""),
+            ])
+            yield output.getvalue()
+            output.seek(0)
+            output.truncate(0)
+    
+    from flask import Response
+    return Response(
+        generate(), 
+        content_type='text/csv; charset=utf-8',
+        headers={"Content-Disposition": "attachment; filename=news_articles.csv"}
     )
 
 
