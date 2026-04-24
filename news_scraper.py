@@ -13,6 +13,7 @@ import time
 from typing import Dict, List, Optional
 from article_schema import ArticleSchema
 from db import news_articles_collection
+from image_utils import download_image_as_base64
 import logging
 
 # Setup logging
@@ -363,6 +364,17 @@ def scrape_news_from_source(source_key: str, source_config: Dict) -> List[Dict]:
                 # Extract image URL using comprehensive search strategy
                 image_url = extract_image_url(link, source_config["url"])
                 
+                # Convert image URL to base64 if available
+                image_base64 = None
+                if image_url:
+                    logger.info(f"Downloading image for article: {title[:50]}...")
+                    image_base64 = download_image_as_base64(image_url)
+                    if image_base64:
+                        logger.info(f"Successfully converted image to base64")
+                    else:
+                        logger.warning(f"Failed to convert image, storing URL as fallback")
+                        image_base64 = image_url  # Fallback to URL if download fails
+                
                 # Create article with STRICT SCHEMA - only these fields
                 article = ArticleSchema.create_article(
                     title=title,
@@ -370,7 +382,7 @@ def scrape_news_from_source(source_key: str, source_config: Dict) -> List[Dict]:
                     topic=source_config["topic"],
                     description=None,
                     content=None,
-                    urlToImage=image_url,
+                    urlToImage=image_base64,  # Now stores base64 or URL fallback
                     source=source_config["source_name"],
                     author=None,
                     publishedAt=None,

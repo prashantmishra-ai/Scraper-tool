@@ -20,7 +20,7 @@ class ArticleSchema:
     Optional fields:
         - description: Brief summary
         - content: Full article text
-        - urlToImage: Image URL
+        - urlToImage: Image as base64 data URI (data:image/...;base64,...) or URL fallback
         - source: News source name
         - author: Author name
         - publishedAt: Publication date (ISO format)
@@ -50,7 +50,7 @@ class ArticleSchema:
             topic: Category/topic (REQUIRED)
             description: Brief summary (optional)
             content: Full article text (optional)
-            urlToImage: Image URL (optional)
+            urlToImage: Image as base64 data URI or URL (optional)
             source: News source name (optional)
             author: Author name (optional)
             publishedAt: Publication date in ISO format (optional)

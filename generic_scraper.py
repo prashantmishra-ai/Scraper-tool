@@ -13,6 +13,7 @@ from selenium.webdriver.firefox.options import Options as FirefoxOptions
 from selenium.common.exceptions import WebDriverException, TimeoutException
 from db import generic_collection
 from text_utils import normalize_text
+from image_utils import download_image_as_base64
 import os
 import time
 import threading
@@ -2298,6 +2299,17 @@ def run_generic_scraper(session_id: str, start_url: str, mode: str, stop_event: 
                                 og_image = meta_elem.get_attribute("content")
                             except Exception:
                                 pass
+                            
+                            # Convert image to base64 if available
+                            og_image_base64 = None
+                            if og_image:
+                                _log(session_id, f"  📷 Downloading and converting image to base64...")
+                                og_image_base64 = download_image_as_base64(og_image)
+                                if og_image_base64:
+                                    _log(session_id, f"  ✓ Image successfully converted to base64")
+                                else:
+                                    _log(session_id, f"  ⚠ Image download failed, using URL as fallback")
+                                    og_image_base64 = og_image  # Fallback to URL
 
                             # Condense into a single document for NewsPro
                             newspro_article = {
@@ -2305,7 +2317,7 @@ def run_generic_scraper(session_id: str, start_url: str, mode: str, stop_event: 
                                 "description": "",
                                 "content": "",
                                 "url": clean_url or url,
-                                "urlToImage": og_image,
+                                "urlToImage": og_image_base64,  # Now stores base64 or URL fallback
                                 "source": "NDTV",
                                 "author": "Unknown",
                                 "topic": "news",
